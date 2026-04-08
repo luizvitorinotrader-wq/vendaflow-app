@@ -2,7 +2,18 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { Plus, CreditCard as Edit2, Trash2, X, FileText } from 'lucide-react';
+import {
+  Plus,
+  CreditCard as Edit2,
+  Trash2,
+  X,
+  FileText,
+  Package2,
+  Tag,
+  BadgeCheck,
+  BadgeX,
+  ShoppingBag,
+} from 'lucide-react';
 import type { Database } from '../lib/database.types';
 import { CategorySelect } from '../components/CategorySelect';
 import { useProductCategories } from '../hooks/useProductCategories';
@@ -18,7 +29,8 @@ interface ProductWithCategory extends Product {
   } | null;
 }
 
-type StockDeductionMode = Database['public']['Tables']['products']['Row']['stock_deduction_mode'];
+type StockDeductionMode =
+  Database['public']['Tables']['products']['Row']['stock_deduction_mode'];
 
 interface StockItem {
   id: string;
@@ -26,9 +38,17 @@ interface StockItem {
   unit: string;
 }
 
+function formatCurrency(value: number) {
+  return value.toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  });
+}
+
 export default function Products() {
   const navigate = useNavigate();
   const { storeId } = useAuth();
+
   const [products, setProducts] = useState<ProductWithCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -96,10 +116,9 @@ export default function Products() {
       console.log('[Products] loadProducts skipped - no storeId');
       return;
     }
+
     console.log('[Products] loadProducts with storeId:', storeId);
 
-    // IMPORTANT: Always join with product_categories to get category name.
-    // The legacy 'category' text field is NOT used for display.
     const { data } = await supabase
       .from('products')
       .select(`
@@ -161,13 +180,11 @@ export default function Products() {
     e.preventDefault();
     if (!storeId) return;
 
-    // VALIDATION: category_id is REQUIRED (category text field is deprecated)
     if (!formData.category_id) {
       alert('Por favor, selecione uma categoria.');
       return;
     }
 
-    // VALIDATION: stock deduction rules
     if (formData.stock_deduction_mode !== 'none') {
       if (!formData.stock_item_id) {
         alert('Por favor, selecione um item de estoque quando o modo de baixa não for "Sem baixa".');
@@ -182,17 +199,17 @@ export default function Products() {
       }
     }
 
-    // IMPORTANT: Only category_id is written. The legacy 'category' field is NOT used.
     const productData = {
       name: formData.name,
-      category_id: formData.category_id, // Source of truth for product category
+      category_id: formData.category_id,
       price: formData.pricing_type === 'unit' ? parseFloat(formData.price) : 0,
       cost: 0,
       stock_quantity: 0,
       min_stock: 0,
       active: formData.active,
       pricing_type: formData.pricing_type,
-      price_per_kg: formData.pricing_type === 'weight' ? parseFloat(formData.price_per_kg) : null,
+      price_per_kg:
+        formData.pricing_type === 'weight' ? parseFloat(formData.price_per_kg) : null,
       stock_item_id: formData.stock_item_id,
       stock_deduction_mode: formData.stock_deduction_mode,
       stock_deduction_multiplier: formData.stock_deduction_multiplier,
@@ -200,14 +217,9 @@ export default function Products() {
     };
 
     if (editingProduct) {
-      await supabase
-        .from('products')
-        .update(productData)
-        .eq('id', editingProduct.id);
+      await supabase.from('products').update(productData).eq('id', editingProduct.id);
     } else {
-      await supabase
-        .from('products')
-        .insert(productData);
+      await supabase.from('products').insert(productData);
     }
 
     closeModal();
@@ -217,185 +229,309 @@ export default function Products() {
   const deleteProduct = async (id: string) => {
     if (!confirm('Tem certeza que deseja excluir este produto?')) return;
 
-    await supabase
-      .from('products')
-      .delete()
-      .eq('id', id);
+    await supabase.from('products').delete().eq('id', id);
 
     loadProducts();
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-gray-500">Carregando...</div>
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-red-100 border-t-red-500" />
+          <p className="text-sm font-medium text-gray-500">Carregando produtos...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 w-full max-w-full">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Produtos</h1>
-          <p className="text-sm sm:text-base text-gray-600 mt-1">Gerencie o cardápio da sua loja</p>
+    <div className="w-full max-w-full space-y-6 pb-4">
+      <div className="overflow-hidden rounded-3xl border border-red-100 bg-gradient-to-r from-red-50 via-white to-orange-50 shadow-sm">
+        <div className="flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-red-100 bg-white/80 px-3 py-1 text-xs font-semibold text-red-600 backdrop-blur">
+              <ShoppingBag className="h-4 w-4" />
+              Cardápio e Produtos
+            </div>
+
+            <h1 className="text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">
+              Produtos
+            </h1>
+            <p className="mt-1 text-sm text-gray-600 sm:text-base">
+              Gerencie o cardápio da sua loja com visual mais limpo e profissional.
+            </p>
+          </div>
+
+          <button
+            onClick={() => openModal()}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-red-600 to-orange-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:from-red-700 hover:to-orange-600 sm:w-auto"
+          >
+            <Plus className="h-5 w-5" />
+            Novo Produto
+          </button>
         </div>
-        <button
-          onClick={() => openModal()}
-          className="bg-gradient-to-r from-green-600 to-emerald-600 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-lg font-semibold hover:from-green-700 hover:to-emerald-700 transition flex items-center justify-center space-x-2 shadow-md"
-        >
-          <Plus className="w-5 h-5" />
-          <span>Novo Produto</span>
-        </button>
       </div>
 
-      {/* Mobile Cards View */}
-      <div className="md:hidden space-y-3">
-        {products.map((product) => (
-          <div key={product.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-            <div className="flex items-start justify-between mb-3">
-              <div className="flex-1">
-                <h3 className="font-bold text-gray-900 text-base mb-1">{product.name}</h3>
-                <div className="flex flex-wrap items-center gap-2 mb-2">
-                  <span className="px-2 py-0.5 bg-gray-100 rounded text-xs text-gray-600">
-                    {product.product_categories?.name || '-'}
-                  </span>
-                  <span className="px-2 py-0.5 bg-blue-50 rounded text-xs text-blue-700">
-                    {product.pricing_type === 'weight' ? 'Por Peso' : 'Unitário'}
-                  </span>
-                  <span
-                    className={`px-2 py-0.5 rounded text-xs font-medium ${
-                      product.active
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-gray-100 text-gray-600'
-                    }`}
-                  >
-                    {product.active ? 'Ativo' : 'Inativo'}
-                  </span>
+      {products.length === 0 ? (
+        <div className="rounded-3xl border border-gray-100 bg-white p-10 text-center shadow-sm">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-50 text-red-500">
+            <Package2 className="h-8 w-8" />
+          </div>
+          <h2 className="text-lg font-bold text-gray-900">Nenhum produto cadastrado</h2>
+          <p className="mt-2 text-sm text-gray-500">
+            Comece adicionando seu primeiro item ao cardápio.
+          </p>
+          <button
+            onClick={() => openModal()}
+            className="mt-5 inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-red-600 to-orange-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:from-red-700 hover:to-orange-600"
+          >
+            <Plus className="h-5 w-5" />
+            Criar primeiro produto
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    Total de produtos
+                  </div>
+                  <div className="mt-2 text-2xl font-bold text-gray-900">{products.length}</div>
                 </div>
-                <div className="text-lg font-bold text-green-600">
-                  {product.pricing_type === 'weight' && product.price_per_kg
-                    ? `R$ ${product.price_per_kg.toFixed(2)}/kg`
-                    : `R$ ${product.price.toFixed(2)}`}
+                <div className="rounded-2xl bg-red-50 p-3 text-red-600">
+                  <Package2 className="h-6 w-6" />
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2 pt-3 border-t border-gray-100">
-              <button
-                onClick={() => navigate(`/app/products/${product.id}/recipe`)}
-                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-primary/10 text-primary rounded-lg font-medium text-sm hover:bg-primary/20 transition"
-              >
-                <FileText className="w-4 h-4" />
-                Receita
-              </button>
-              <button
-                onClick={() => openModal(product)}
-                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium text-sm hover:bg-gray-200 transition"
-              >
-                <Edit2 className="w-4 h-4" />
-                Editar
-              </button>
-              <button
-                onClick={() => deleteProduct(product.id)}
-                className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition"
-                title="Excluir"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+
+            <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    Ativos
+                  </div>
+                  <div className="mt-2 text-2xl font-bold text-green-600">
+                    {products.filter((p) => p.active).length}
+                  </div>
+                </div>
+                <div className="rounded-2xl bg-green-50 p-3 text-green-600">
+                  <BadgeCheck className="h-6 w-6" />
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    Inativos
+                  </div>
+                  <div className="mt-2 text-2xl font-bold text-gray-700">
+                    {products.filter((p) => !p.active).length}
+                  </div>
+                </div>
+                <div className="rounded-2xl bg-gray-100 p-3 text-gray-600">
+                  <BadgeX className="h-6 w-6" />
+                </div>
+              </div>
             </div>
           </div>
-        ))}
-      </div>
 
-      {/* Desktop Table View */}
-      <div className="hidden md:block bg-white rounded-xl shadow-sm border border-gray-100">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-          <thead className="bg-gray-50 border-b border-gray-200">
-            <tr>
-              <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Nome</th>
-              <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Categoria</th>
-              <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Tipo</th>
-              <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Preço</th>
-              <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Status</th>
-              <th className="px-6 py-4 text-right text-sm font-semibold text-gray-900">Ações</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
+          <div className="grid gap-4 md:hidden">
             {products.map((product) => (
-              <tr key={product.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                  {product.name}
-                </td>
-                <td className="px-6 py-4 text-sm text-gray-600">
-                  {product.product_categories?.name || '-'}
-                </td>
-                <td className="px-6 py-4 text-sm text-gray-600">
-                  {product.pricing_type === 'weight' ? 'Por Peso' : 'Unitário'}
-                </td>
-                <td className="px-6 py-4 text-sm text-gray-900 font-semibold">
-                  {product.pricing_type === 'weight' && product.price_per_kg
-                    ? `R$ ${product.price_per_kg.toFixed(2)}/kg`
-                    : `R$ ${product.price.toFixed(2)}`}
-                </td>
-                <td className="px-6 py-4 text-sm">
-                  <span
-                    className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      product.active
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-gray-100 text-gray-600'
-                    }`}
-                  >
-                    {product.active ? 'Ativo' : 'Inativo'}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-right">
-                  <div className="flex items-center justify-end space-x-2">
-                    <button
-                      onClick={() => navigate(`/app/products/${product.id}/recipe`)}
-                      className="p-2 hover:bg-primary/10 rounded-lg text-primary hover:opacity-80"
-                      title="Ficha Técnica"
-                    >
-                      <FileText className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => openModal(product)}
-                      className="p-2 hover:bg-gray-100 rounded-lg text-gray-600 hover:text-gray-900"
-                      title="Editar"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => deleteProduct(product.id)}
-                      className="p-2 hover:bg-red-50 rounded-lg text-red-600"
-                      title="Excluir"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+              <div
+                key={product.id}
+                className="overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm"
+              >
+                <div className="border-b border-gray-100 bg-gradient-to-r from-white to-gray-50 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="truncate text-base font-bold text-gray-900">{product.name}</h3>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">
+                          <Tag className="h-3.5 w-3.5" />
+                          {product.product_categories?.name || '-'}
+                        </span>
+
+                        <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
+                          {product.pricing_type === 'weight' ? 'Por Peso' : 'Unitário'}
+                        </span>
+
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                            product.active
+                              ? 'bg-green-100 text-green-700'
+                              : 'bg-gray-100 text-gray-600'
+                          }`}
+                        >
+                          {product.active ? 'Ativo' : 'Inativo'}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                </td>
-              </tr>
+
+                  <div className="mt-4 text-2xl font-bold tracking-tight text-red-600">
+                    {product.pricing_type === 'weight' && product.price_per_kg
+                      ? `${formatCurrency(Number(product.price_per_kg))}/kg`
+                      : formatCurrency(Number(product.price))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 p-4">
+                  <button
+                    onClick={() => navigate(`/app/products/${product.id}/recipe`)}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-100"
+                  >
+                    <FileText className="h-4 w-4" />
+                    Receita
+                  </button>
+
+                  <button
+                    onClick={() => openModal(product)}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gray-100 px-3 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-200"
+                  >
+                    <Edit2 className="h-4 w-4" />
+                    Editar
+                  </button>
+
+                  <button
+                    onClick={() => deleteProduct(product.id)}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-100"
+                    title="Excluir"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Excluir
+                  </button>
+                </div>
+              </div>
             ))}
-          </tbody>
-          </table>
-        </div>
-      </div>
+          </div>
+
+          <div className="hidden overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm md:block">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50/80">
+                  <tr className="border-b border-gray-100">
+                    <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wide text-gray-500">
+                      Nome
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wide text-gray-500">
+                      Categoria
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wide text-gray-500">
+                      Tipo
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wide text-gray-500">
+                      Preço
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wide text-gray-500">
+                      Status
+                    </th>
+                    <th className="px-6 py-4 text-right text-xs font-bold uppercase tracking-wide text-gray-500">
+                      Ações
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y divide-gray-100">
+                  {products.map((product) => (
+                    <tr key={product.id} className="transition hover:bg-gray-50/80">
+                      <td className="px-6 py-4 text-sm font-semibold text-gray-900">
+                        {product.name}
+                      </td>
+
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">
+                          <Tag className="h-3.5 w-3.5" />
+                          {product.product_categories?.name || '-'}
+                        </span>
+                      </td>
+
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                        {product.pricing_type === 'weight' ? 'Por Peso' : 'Unitário'}
+                      </td>
+
+                      <td className="px-6 py-4 text-sm font-bold text-gray-900">
+                        {product.pricing_type === 'weight' && product.price_per_kg
+                          ? `${formatCurrency(Number(product.price_per_kg))}/kg`
+                          : formatCurrency(Number(product.price))}
+                      </td>
+
+                      <td className="px-6 py-4 text-sm">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+                            product.active
+                              ? 'bg-green-100 text-green-700'
+                              : 'bg-gray-100 text-gray-600'
+                          }`}
+                        >
+                          {product.active ? 'Ativo' : 'Inativo'}
+                        </span>
+                      </td>
+
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => navigate(`/app/products/${product.id}/recipe`)}
+                            className="rounded-xl p-2 text-red-600 transition hover:bg-red-50"
+                            title="Ficha Técnica"
+                          >
+                            <FileText className="h-4 w-4" />
+                          </button>
+
+                          <button
+                            onClick={() => openModal(product)}
+                            className="rounded-xl p-2 text-gray-600 transition hover:bg-gray-100 hover:text-gray-900"
+                            title="Editar"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </button>
+
+                          <button
+                            onClick={() => deleteProduct(product.id)}
+                            className="rounded-xl p-2 text-red-600 transition hover:bg-red-50"
+                            title="Excluir"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
 
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full">
-            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-gray-900">
-                {editingProduct ? 'Editar Produto' : 'Novo Produto'}
-              </h2>
-              <button onClick={closeModal} className="text-gray-500 hover:text-gray-700">
-                <X className="w-6 h-6" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-[2px]">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white shadow-2xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white/95 px-5 py-4 backdrop-blur sm:px-6">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900 sm:text-2xl">
+                  {editingProduct ? 'Editar Produto' : 'Novo Produto'}
+                </h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  Preencha os dados do produto para salvar no cardápio.
+                </p>
+              </div>
+
+              <button
+                onClick={closeModal}
+                className="rounded-xl p-2 text-gray-500 transition hover:bg-gray-100 hover:text-gray-700"
+              >
+                <X className="h-5 w-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-5 p-5 sm:p-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="mb-2 block text-sm font-semibold text-gray-700">
                   Nome do Produto *
                 </label>
                 <input
@@ -404,12 +540,12 @@ export default function Products() {
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   required
                   placeholder="Ex: Açaí 500ml"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-red-400 focus:ring-4 focus:ring-red-50"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="mb-2 block text-sm font-semibold text-gray-700">
                   Categoria *
                 </label>
                 {storeId && (
@@ -428,13 +564,18 @@ export default function Products() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="mb-2 block text-sm font-semibold text-gray-700">
                   Tipo de Venda *
                 </label>
                 <select
                   value={formData.pricing_type}
-                  onChange={(e) => setFormData({ ...formData, pricing_type: e.target.value as 'unit' | 'weight' })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      pricing_type: e.target.value as 'unit' | 'weight',
+                    })
+                  }
+                  className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-red-400 focus:ring-4 focus:ring-red-50"
                 >
                   <option value="unit">Preço Unitário</option>
                   <option value="weight">Preço por Peso (Kg)</option>
@@ -443,7 +584,7 @@ export default function Products() {
 
               {formData.pricing_type === 'unit' ? (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="mb-2 block text-sm font-semibold text-gray-700">
                     Preço Unitário *
                   </label>
                   <input
@@ -453,12 +594,12 @@ export default function Products() {
                     onChange={(e) => setFormData({ ...formData, price: e.target.value })}
                     required
                     placeholder="Ex: 15.00"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-red-400 focus:ring-4 focus:ring-red-50"
                   />
                 </div>
               ) : (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="mb-2 block text-sm font-semibold text-gray-700">
                     Preço por Kg *
                   </label>
                   <input
@@ -468,44 +609,53 @@ export default function Products() {
                     onChange={(e) => setFormData({ ...formData, price_per_kg: e.target.value })}
                     required
                     placeholder="Ex: 40.00"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-red-400 focus:ring-4 focus:ring-red-50"
                   />
                 </div>
               )}
 
-              <div>
-                <label className="flex items-center space-x-2">
+              <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
+                <label className="flex items-center gap-3">
                   <input
                     type="checkbox"
                     checked={formData.active}
                     onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
-                    className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                    className="h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
                   />
-                  <span className="text-sm font-medium text-gray-700">Produto Ativo</span>
+                  <span className="text-sm font-semibold text-gray-700">Produto Ativo</span>
                 </label>
               </div>
 
-              <StockDeductionConfig
-                stockItemId={formData.stock_item_id}
-                deductionMode={formData.stock_deduction_mode}
-                deductionMultiplier={formData.stock_deduction_multiplier}
-                onDeductionModeChange={(mode) => setFormData({ ...formData, stock_deduction_mode: mode })}
-                onDeductionMultiplierChange={(multiplier) => setFormData({ ...formData, stock_deduction_multiplier: multiplier })}
-                onStockItemIdChange={(stockItemId) => setFormData({ ...formData, stock_item_id: stockItemId })}
-                stockItems={stockItems}
-              />
+              <div className="rounded-2xl border border-gray-100 bg-white">
+                <StockDeductionConfig
+                  stockItemId={formData.stock_item_id}
+                  deductionMode={formData.stock_deduction_mode}
+                  deductionMultiplier={formData.stock_deduction_multiplier}
+                  onDeductionModeChange={(mode) =>
+                    setFormData({ ...formData, stock_deduction_mode: mode })
+                  }
+                  onDeductionMultiplierChange={(multiplier) =>
+                    setFormData({ ...formData, stock_deduction_multiplier: multiplier })
+                  }
+                  onStockItemIdChange={(stockItemId) =>
+                    setFormData({ ...formData, stock_item_id: stockItemId })
+                  }
+                  stockItems={stockItems}
+                />
+              </div>
 
-              <div className="flex items-center space-x-4 pt-4">
+              <div className="flex flex-col gap-3 pt-2 sm:flex-row">
                 <button
                   type="submit"
-                  className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 text-white py-3 rounded-lg font-semibold hover:from-green-700 hover:to-emerald-700 transition shadow-md"
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-red-600 to-orange-500 py-3 text-sm font-semibold text-white shadow-sm transition hover:from-red-700 hover:to-orange-600"
                 >
                   {editingProduct ? 'Salvar Alterações' : 'Criar Produto'}
                 </button>
+
                 <button
                   type="button"
                   onClick={closeModal}
-                  className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-200 transition"
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-gray-100 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-200"
                 >
                   Cancelar
                 </button>

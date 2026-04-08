@@ -110,7 +110,7 @@ export default function TabView() {
         .select('id, name, price, pricing_type')
         .eq('store_id', storeId)
         .eq('is_active', true)
-        .eq('pricing_type', 'unit') // Apenas produtos vendidos por unidade
+        .eq('pricing_type', 'unit')
         .order('name');
 
       if (productsError) throw productsError;
@@ -175,7 +175,6 @@ export default function TabView() {
     const product = products.find((p) => p.id === selectedProductId);
     if (!product) return;
 
-    // Sanitizar para número inteiro
     const qty = Math.max(1, Math.floor(parseFloat(quantity)));
     if (qty <= 0 || isNaN(qty)) {
       alert('Quantidade deve ser um número inteiro maior que zero');
@@ -223,7 +222,7 @@ export default function TabView() {
     }
   };
 
-  const handleCloseTab = () => {
+  const handleCloseTab = async () => {
     if (!tab?.id) return;
 
     if (!canCheckoutTab(effectiveUserRole)) {
@@ -232,29 +231,28 @@ export default function TabView() {
     }
 
     if (items.length === 0) {
-  const confirmClose = window.confirm(
-    'Esta comanda não possui itens.\nDeseja fechar mesmo assim?'
-  );
+      const confirmClose = window.confirm(
+        'Esta comanda não possui itens.\nDeseja fechar mesmo assim?'
+      );
 
-  if (!confirmClose) return;
+      if (!confirmClose) return;
 
-  // 🔥 Fecha direto sem abrir modal de pagamento
-  try {
-    const { error } = await supabase
-      .from('tabs')
-      .update({ status: 'closed' })
-      .eq('id', tab.id);
+      try {
+        const { error } = await supabase
+          .from('tabs')
+          .update({ status: 'closed' })
+          .eq('id', tab.id);
 
-    if (error) throw error;
+        if (error) throw error;
 
-    navigate('/app/tables');
-  } catch (error) {
-    console.error('Erro ao fechar comanda vazia:', error);
-    alert('Erro ao fechar comanda');
-  }
+        navigate('/app/tables');
+      } catch (error) {
+        console.error('Erro ao fechar comanda vazia:', error);
+        alert('Erro ao fechar comanda');
+      }
 
-  return;
-}
+      return;
+    }
 
     setShowCheckoutModal(true);
   };

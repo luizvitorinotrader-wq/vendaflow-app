@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { Plus, CreditCard as Edit2, Power, AlertCircle, Loader2 } from 'lucide-react';
+import { Plus, Pencil, Power, AlertCircle, Loader2, Trash2 } from 'lucide-react';
 import CategoryModal from '../components/CategoryModal';
 
 interface Category {
@@ -23,6 +23,7 @@ export default function Categories() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [toggleLoading, setToggleLoading] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
 
   useEffect(() => {
     console.log('[Categories] effectiveStoreId:', storeId);
@@ -34,6 +35,7 @@ export default function Categories() {
       console.log('[Categories] loadCategories skipped - no storeId');
       return;
     }
+
     console.log('[Categories] loadCategories with storeId:', storeId);
 
     try {
@@ -74,7 +76,8 @@ export default function Categories() {
       const { error: updateError } = await supabase
         .from('product_categories')
         .update({ is_active: !category.is_active })
-        .eq('id', category.id);
+        .eq('id', category.id)
+        .eq('store_id', storeId);
 
       if (updateError) throw updateError;
 
@@ -84,6 +87,45 @@ export default function Categories() {
       alert('Erro ao alterar status da categoria.');
     } finally {
       setToggleLoading(null);
+    }
+  };
+
+  const handleDeleteCategory = async (category: Category) => {
+    if (!storeId) return;
+
+    try {
+      setDeleteLoading(category.id);
+
+      const { count, error: countError } = await supabase
+        .from('products')
+        .select('*', { count: 'exact', head: true })
+        .eq('store_id', storeId)
+        .eq('category_id', category.id);
+
+      if (countError) throw countError;
+
+      if ((count || 0) > 0) {
+        alert('Não é possível excluir esta categoria porque há produtos vinculados.');
+        return;
+      }
+
+      const confirmed = window.confirm(`Deseja excluir a categoria "${category.name}"?`);
+      if (!confirmed) return;
+
+      const { error: deleteError } = await supabase
+        .from('product_categories')
+        .delete()
+        .eq('id', category.id)
+        .eq('store_id', storeId);
+
+      if (deleteError) throw deleteError;
+
+      await loadCategories();
+    } catch (err) {
+      console.error('Error deleting category:', err);
+      alert('Erro ao excluir categoria.');
+    } finally {
+      setDeleteLoading(null);
     }
   };
 
@@ -108,7 +150,9 @@ export default function Categories() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Categorias</h1>
-          <p className="text-sm sm:text-base text-gray-600 mt-1">Organize seus produtos em categorias personalizadas</p>
+          <p className="text-sm sm:text-base text-gray-600 mt-1">
+            Organize seus produtos em categorias personalizadas
+          </p>
         </div>
         <button
           onClick={handleCreateCategory}
@@ -150,81 +194,100 @@ export default function Categories() {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Ordem
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Nome
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Descrição
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Ações
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {categories.map((category) => (
-                <tr key={category.id} className={!category.is_active ? 'bg-gray-50' : ''}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {category.display_order}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">{category.name}</div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="text-sm text-gray-600">
-                      {category.description || '-'}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        category.is_active
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-gray-100 text-gray-800'
-                      }`}
-                    >
-                      {category.is_active ? 'Ativa' : 'Inativa'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => handleEditCategory(category)}
-                        className="text-primary hover:text-primary-dark p-1 rounded hover:bg-gray-100 transition"
-                        title="Editar"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleToggleActive(category)}
-                        disabled={toggleLoading === category.id}
-                        className={`p-1 rounded transition ${
-                          category.is_active
-                            ? 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                            : 'text-green-600 hover:text-green-700 hover:bg-green-50'
-                        } disabled:opacity-50`}
-                        title={category.is_active ? 'Desativar' : 'Ativar'}
-                      >
-                        {toggleLoading === category.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Power className="w-4 h-4" />
-                        )}
-                      </button>
-                    </div>
-                  </td>
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Ordem
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Nome
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Descrição
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Ações
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+
+              <tbody className="bg-white divide-y divide-gray-200">
+                {categories.map((category) => (
+                  <tr key={category.id} className={!category.is_active ? 'bg-gray-50' : ''}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {category.display_order}
+                    </td>
+
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">{category.name}</div>
+                    </td>
+
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-gray-600">
+                        {category.description || '-'}
+                      </div>
+                    </td>
+
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          category.is_active
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-gray-100 text-gray-800'
+                        }`}
+                      >
+                        {category.is_active ? 'Ativa' : 'Inativa'}
+                      </span>
+                    </td>
+
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => handleEditCategory(category)}
+                          className="text-primary hover:text-primary-dark p-1 rounded hover:bg-gray-100 transition"
+                          title="Editar"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+
+                        <button
+                          onClick={() => handleDeleteCategory(category)}
+                          disabled={deleteLoading === category.id}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50 p-1 rounded transition disabled:opacity-50"
+                          title="Excluir"
+                        >
+                          {deleteLoading === category.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
+                        </button>
+
+                        <button
+                          onClick={() => handleToggleActive(category)}
+                          disabled={toggleLoading === category.id}
+                          className={`p-1 rounded transition ${
+                            category.is_active
+                              ? 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                              : 'text-green-600 hover:text-green-700 hover:bg-green-50'
+                          } disabled:opacity-50`}
+                          title={category.is_active ? 'Desativar' : 'Ativar'}
+                        >
+                          {toggleLoading === category.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Power className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

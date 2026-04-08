@@ -5,7 +5,7 @@ import InactivityWarning from './components/InactivityWarning';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { RoleGuard } from './components/RoleGuard';
 import { Loader2 } from 'lucide-react';
-import Landing from './pages/Landing';
+// import Landing from './pages/Landing'; // Removido no app puro
 import Login from './pages/Login';
 import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
@@ -77,7 +77,6 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const { user, hasValidStore, isSubscriptionBlocked, loading, isSuperAdmin, isSupportMode, profile } = useAuth();
 
-  // Show loading spinner during authentication check to avoid white screen
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -89,14 +88,10 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Only redirect authenticated users with complete profiles to protected areas
-  // If user exists but profile is not loaded yet, allow public route to render
   if (!user || !profile) {
     return <>{children}</>;
   }
 
-  // User is authenticated and has profile - redirect to appropriate area
-  // CRITICAL: Support mode takes precedence - redirect to store dashboard
   if (isSuperAdmin && !isSupportMode) {
     return <Navigate to="/app/super-admin" replace />;
   }
@@ -134,7 +129,6 @@ function SuperAdminRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/login" replace />;
   }
 
-  // CRITICAL: Redirect to store dashboard if in support mode
   if (isSupportMode) {
     return <Navigate to="/app/dashboard" replace />;
   }
@@ -160,23 +154,18 @@ function SetupStoreRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Not authenticated - redirect to login
   if (!user) {
     return <Navigate to="/login" replace />;
   }
 
-  // Super admin doesn't need store setup - redirect to super admin area
-  // CRITICAL: Unless in support mode, then redirect to store dashboard
   if (isSuperAdmin && !isSupportMode) {
     return <Navigate to="/app/super-admin" replace />;
   }
 
-  // Already has a valid store - redirect to dashboard
   if (hasValidStore) {
     return <Navigate to="/app/dashboard" replace />;
   }
 
-  // Authenticated user without store - allow setup
   return <>{children}</>;
 }
 
@@ -186,7 +175,7 @@ function App() {
       <BrowserRouter>
         <AuthProvider>
           <Routes>
-            <Route path="/" element={<Landing />} />
+            <Route path="/" element={<Navigate to="/login" replace />} />
             <Route
               path="/login"
               element={
@@ -337,10 +326,7 @@ function App() {
                   </RoleGuard>
                 }
               />
-              <Route
-                path="minha-conta"
-                element={<MyAccount />}
-              />
+              <Route path="minha-conta" element={<MyAccount />} />
               <Route
                 path="admin"
                 element={
@@ -351,7 +337,6 @@ function App() {
               />
             </Route>
 
-            {/* Super Admin Routes - Separate from store routes */}
             <Route
               path="/app/super-admin"
               element={

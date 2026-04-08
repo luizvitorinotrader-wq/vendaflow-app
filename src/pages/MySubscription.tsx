@@ -2,7 +2,20 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { CreditCard, Calendar, AlertTriangle, CheckCircle, MessageCircle, Home, Gift, Users, Table2 } from 'lucide-react';
+import {
+  CreditCard,
+  Calendar,
+  AlertTriangle,
+  CheckCircle,
+  MessageCircle,
+  Home,
+  Gift,
+  Users,
+  Table2,
+  Crown,
+  ShieldCheck,
+  Clock3,
+} from 'lucide-react';
 import type { Database } from '../lib/database.types';
 import { logger } from '../lib/logger';
 import { getPlanLimits } from '../lib/planLimits';
@@ -65,6 +78,7 @@ export default function MySubscription() {
       overdue: 'bg-orange-100 text-orange-800',
       cancelled: 'bg-red-100 text-red-800',
     };
+
     return colors[status || ''] || 'bg-gray-100 text-gray-800';
   };
 
@@ -109,21 +123,21 @@ export default function MySubscription() {
   };
 
   const getStatusMessageColor = () => {
-    if (!store) return 'bg-gray-100 text-gray-800';
+    if (!store) return 'bg-gray-100 text-gray-800 border-gray-300';
 
     if (store.is_blocked || store.subscription_status === 'cancelled') {
-      return 'bg-red-100 border-red-400 text-red-700';
+      return 'bg-red-100 border-red-300 text-red-700';
     }
 
     switch (store.subscription_status) {
       case 'trial':
-        return 'bg-yellow-100 border-yellow-400 text-yellow-700';
+        return 'bg-yellow-100 border-yellow-300 text-yellow-700';
       case 'active':
-        return 'bg-green-100 border-green-400 text-green-700';
+        return 'bg-green-100 border-green-300 text-green-700';
       case 'overdue':
-        return 'bg-orange-100 border-orange-400 text-orange-700';
+        return 'bg-orange-100 border-orange-300 text-orange-700';
       default:
-        return 'bg-gray-100 border-gray-400 text-gray-700';
+        return 'bg-gray-100 border-gray-300 text-gray-700';
     }
   };
 
@@ -158,58 +172,60 @@ export default function MySubscription() {
   };
 
   const handleRenewSubscription = async () => {
-  try {
-    if (!user || processingCheckout) return;
+    try {
+      if (!user || processingCheckout) return;
 
-    if (!store?.id) {
-      alert("Erro: loja não identificada.");
-      return;
+      if (!store?.id) {
+        alert('Erro: loja não identificada.');
+        return;
+      }
+
+      setProcessingCheckout(true);
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        alert('Sessão expirada. Faça login novamente.');
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke('create-checkout-session-v2', {
+        body: {
+          storeId: store.id,
+          plan: store.plan || store.plan_name || 'starter',
+        },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (error) {
+        console.error('Erro ao criar sessão de checkout:', error);
+        alert('Não foi possível iniciar o pagamento. Tente novamente.');
+        return;
+      }
+
+      if (data?.url) {
+        window.location.href = data.url;
+      } else {
+        alert('Não foi possível gerar o link de pagamento.');
+      }
+    } catch (err: any) {
+      console.error('Erro ao renovar assinatura:', err);
+      alert('Erro inesperado. Tente novamente.');
+    } finally {
+      setProcessingCheckout(false);
     }
-
-    setProcessingCheckout(true);
-
-    const { data: { session } } = await supabase.auth.getSession();
-
-    if (!session?.access_token) {
-      alert("Sessão expirada. Faça login novamente.");
-      return;
-    }
-
-    const { data, error } = await supabase.functions.invoke("create-checkout-session-v2", {
-      body: {
-        storeId: store.id,
-        plan: store.plan || store.plan_name || 'starter',
-      },
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-      },
-    });
-
-    if (error) {
-      console.error("Erro ao criar sessão de checkout:", error);
-      alert("Não foi possível iniciar o pagamento. Tente novamente.");
-      return;
-    }
-
-    if (data?.url) {
-      window.location.href = data.url;
-    } else {
-      alert("Não foi possível gerar o link de pagamento.");
-    }
-
-  } catch (err: any) {
-    console.error("Erro ao renovar assinatura:", err);
-    alert("Erro inesperado. Tente novamente.");
-  } finally {
-    setProcessingCheckout(false);
-  }
-};
+  };
 
   if (loading) {
     return (
-      <div className="p-6">
-        <div className="flex items-center justify-center h-96">
-          <p className="text-gray-500">Carregando...</p>
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-red-100 border-t-red-500" />
+          <p className="text-sm font-medium text-gray-500">Carregando assinatura...</p>
         </div>
       </div>
     );
@@ -217,159 +233,265 @@ export default function MySubscription() {
 
   if (!store) {
     return (
-      <div className="p-6">
-        <div className="bg-white rounded-lg shadow p-12 text-center">
-          <p className="text-gray-500 text-lg">Nenhuma assinatura encontrada</p>
+      <div className="w-full max-w-full space-y-6 pb-4">
+        <div className="rounded-3xl border border-gray-100 bg-white p-10 text-center shadow-sm">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-50 text-red-500">
+            <CreditCard className="h-8 w-8" />
+          </div>
+          <h3 className="text-lg font-bold text-gray-900">Nenhuma assinatura encontrada</h3>
+          <p className="mt-2 text-sm text-gray-500">
+            Não localizamos dados de assinatura para esta conta.
+          </p>
         </div>
       </div>
     );
   }
 
   const daysRemaining = getDaysRemaining();
+  const limits = getPlanLimits(store.plan || 'starter');
 
   return (
-    <div className="p-6">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Minha Assinatura</h1>
-        <p className="text-gray-600 mt-1">Informações do seu plano e acesso</p>
+    <div className="w-full max-w-full space-y-6 pb-4">
+      <div className="overflow-hidden rounded-3xl border border-red-100 bg-gradient-to-r from-red-50 via-white to-orange-50 shadow-sm">
+        <div className="flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-red-100 bg-white/80 px-3 py-1 text-xs font-semibold text-red-600 backdrop-blur">
+              <CreditCard className="h-4 w-4" />
+              Plano e Acesso
+            </div>
+
+            <h1 className="text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">
+              Minha Assinatura
+            </h1>
+            <p className="mt-1 text-sm text-gray-600 sm:text-base">
+              Acompanhe plano, status, validade e benefícios da sua assinatura.
+            </p>
+          </div>
+        </div>
       </div>
 
       {store.is_blocked && (
-        <div className="mb-6 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative flex items-center gap-2">
-          <AlertTriangle className="w-5 h-5" />
-          <span className="font-semibold">Acesso bloqueado até regularização</span>
+        <div className="rounded-2xl border border-red-300 bg-red-100 p-4 shadow-sm">
+          <div className="flex items-start gap-3">
+            <div className="rounded-xl bg-red-200 p-2 text-red-700">
+              <AlertTriangle className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-red-900">Acesso bloqueado</p>
+              <p className="mt-1 text-sm text-red-800">
+                Sua loja está bloqueada até a regularização da assinatura.
+              </p>
+            </div>
+          </div>
         </div>
       )}
 
-      <div className={`mb-8 border px-6 py-4 rounded-lg ${getStatusMessageColor()} flex items-center gap-3`}>
-        {(store.subscription_status === 'active' || store.subscription_status === 'trial') && !store.is_blocked ? (
-          <CheckCircle className="w-6 h-6" />
-        ) : (
-          <AlertTriangle className="w-6 h-6" />
-        )}
-        <span className="text-lg font-semibold">{getStatusMessage()}</span>
+      <div
+        className={`rounded-2xl border px-6 py-4 shadow-sm ${getStatusMessageColor()}`}
+      >
+        <div className="flex items-center gap-3">
+          {(store.subscription_status === 'active' || store.subscription_status === 'trial') &&
+          !store.is_blocked ? (
+            <CheckCircle className="h-6 w-6" />
+          ) : (
+            <AlertTriangle className="h-6 w-6" />
+          )}
+          <span className="text-base font-semibold sm:text-lg">{getStatusMessage()}</span>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center gap-3 mb-3">
-            <CreditCard className="w-6 h-6 text-primary" />
-            <h3 className="text-sm font-medium text-gray-600">Plano Atual</h3>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Plano atual
+              </div>
+              <div className="mt-2 text-2xl font-bold text-gray-900">
+                {getPlanName(store.plan)}
+              </div>
+            </div>
+            <div className="rounded-2xl bg-purple-50 p-3 text-purple-600">
+              <Crown className="h-6 w-6" />
+            </div>
           </div>
-          <p className="text-2xl font-bold text-gray-900 mb-2">
-            {getPlanName(store.plan)}
-          </p>
+
           {store.access_mode && (
-            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-full border ${getAccessModeBadge(store.access_mode)}`}>
-              {store.access_mode === 'manual' && <Gift className="w-3 h-3" />}
-              {store.access_mode === 'paid' && <CreditCard className="w-3 h-3" />}
-              {getAccessModeLabel(store.access_mode)}
-            </span>
+            <div className="mt-4">
+              <span
+                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${getAccessModeBadge(
+                  store.access_mode
+                )}`}
+              >
+                {store.access_mode === 'manual' && <Gift className="h-3 w-3" />}
+                {store.access_mode === 'paid' && <CreditCard className="h-3 w-3" />}
+                {getAccessModeLabel(store.access_mode)}
+              </span>
+            </div>
           )}
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center gap-3 mb-3">
-            <CheckCircle className="w-6 h-6 text-green-600" />
-            <h3 className="text-sm font-medium text-gray-600">Status da Assinatura</h3>
+        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Status da assinatura
+              </div>
+              <div className="mt-3">
+                <span
+                  className={`inline-flex rounded-full px-3 py-1 text-sm font-semibold ${getStatusColor(
+                    store.subscription_status,
+                    store.is_blocked
+                  )}`}
+                >
+                  {getStatusTranslation(store.subscription_status)}
+                </span>
+              </div>
+            </div>
+            <div className="rounded-2xl bg-green-50 p-3 text-green-600">
+              <ShieldCheck className="h-6 w-6" />
+            </div>
           </div>
-          <span className={`inline-block px-3 py-1 text-sm font-semibold rounded-full ${getStatusColor(store.subscription_status, store.is_blocked)}`}>
-            {getStatusTranslation(store.subscription_status)}
-          </span>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center gap-3 mb-3">
-            <Calendar className="w-6 h-6 text-orange-600" />
-            <h3 className="text-sm font-medium text-gray-600">Dias Restantes</h3>
+        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Dias restantes
+              </div>
+              <div className="mt-2 text-2xl font-bold text-gray-900">
+                {daysRemaining} {daysRemaining === 1 ? 'dia' : 'dias'}
+              </div>
+            </div>
+            <div className="rounded-2xl bg-orange-50 p-3 text-orange-600">
+              <Clock3 className="h-6 w-6" />
+            </div>
           </div>
-          <p className="text-2xl font-bold text-gray-900">
-            {daysRemaining} {daysRemaining === 1 ? 'dia' : 'dias'}
-          </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-sm font-medium text-gray-600 mb-2">Teste Grátis até</h3>
-          <p className="text-xl font-semibold text-gray-900">
-            {formatDate(store.trial_ends_at)}
-          </p>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="rounded-2xl bg-yellow-50 p-3 text-yellow-600">
+              <Calendar className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Teste grátis até
+              </div>
+              <div className="mt-1 text-xl font-bold text-gray-900">
+                {formatDate(store.trial_ends_at)}
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-sm font-medium text-gray-600 mb-2">Assinatura válida até</h3>
-          <p className="text-xl font-semibold text-gray-900">
-            {formatDate(store.subscription_ends_at)}
-          </p>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-lg shadow p-6 mb-8">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Benefícios do Plano {getPlanName(store.plan)}</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {(() => {
-            const limits = getPlanLimits(store.plan || 'starter');
-            return (
-              <>
-                <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
-                  <Users className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                  <div>
-                    <p className="font-medium text-gray-900">Usuários</p>
-                    <p className="text-sm text-gray-600">
-                      {limits.maxUsers === 999 ? 'Ilimitados' : `Até ${limits.maxUsers} usuários ativos`}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
-                  <Table2 className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
-                  <div>
-                    <p className="font-medium text-gray-900">Mesas/Comandas</p>
-                    <p className="text-sm text-gray-600">
-                      {limits.hasTablesFeature
-                        ? `Até ${limits.maxTables} mesas simultâneas`
-                        : 'Disponível em planos Pro e Premium'}
-                    </p>
-                  </div>
-                </div>
-              </>
-            );
-          })()}
+        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="rounded-2xl bg-blue-50 p-3 text-blue-600">
+              <Calendar className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Assinatura válida até
+              </div>
+              <div className="mt-1 text-xl font-bold text-gray-900">
+                {formatDate(store.subscription_ends_at)}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-4">
+      <div className="overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm">
+        <div className="border-b border-gray-100 p-6">
+          <h3 className="text-lg font-bold text-gray-900">
+            Benefícios do Plano {getPlanName(store.plan)}
+          </h3>
+          <p className="mt-1 text-sm text-gray-500">
+            Recursos disponíveis no seu plano atual.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 p-6 md:grid-cols-2">
+          <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
+            <div className="flex items-start gap-3">
+              <div className="rounded-xl bg-blue-100 p-2 text-blue-600">
+                <Users className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="font-semibold text-gray-900">Usuários</p>
+                <p className="mt-1 text-sm text-gray-600">
+                  {limits.maxUsers === 999
+                    ? 'Ilimitados'
+                    : `Até ${limits.maxUsers} usuários ativos`}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
+            <div className="flex items-start gap-3">
+              <div className="rounded-xl bg-green-100 p-2 text-green-600">
+                <Table2 className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="font-semibold text-gray-900">Mesas/Comandas</p>
+                <p className="mt-1 text-sm text-gray-600">
+                  {limits.hasTablesFeature
+                    ? `Até ${limits.maxTables} mesas simultâneas`
+                    : 'Disponível em planos Pro e Premium'}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3 sm:flex-row">
         <button
           onClick={() => navigate('/app/dashboard')}
-          className="flex items-center justify-center gap-2 bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 transition font-medium"
+          className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gray-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-gray-700"
         >
-          <Home className="w-5 h-5" />
+          <Home className="h-5 w-5" />
           Voltar ao Dashboard
         </button>
 
-        <button
-          className="flex items-center justify-center gap-2 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition font-medium"
-        >
-          <MessageCircle className="w-5 h-5" />
+        <button className="inline-flex items-center justify-center gap-2 rounded-2xl bg-green-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-green-700">
+          <MessageCircle className="h-5 w-5" />
           Falar no WhatsApp
         </button>
 
         <button
           onClick={handleRenewSubscription}
           disabled={processingCheckout}
-          className="flex items-center justify-center gap-2 bg-primary text-white px-6 py-3 rounded-lg hover:opacity-90 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {processingCheckout ? (
             <>
-              <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+              <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24">
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                  fill="none"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                />
               </svg>
               Processando...
             </>
           ) : (
             <>
-              <CreditCard className="w-5 h-5" />
+              <CreditCard className="h-5 w-5" />
               Renovar Assinatura
             </>
           )}

@@ -13,7 +13,11 @@ import {
   ShoppingCart,
   CreditCard,
   Clock,
-  ArrowUpDown
+  ArrowUpDown,
+  LayoutDashboard,
+  BarChart3,
+  ShieldAlert,
+  Boxes,
 } from 'lucide-react';
 import { logger } from '../lib/logger';
 import DashboardStockInsights from '../components/DashboardStockInsights';
@@ -98,130 +102,136 @@ export default function Dashboard() {
 
   const loadDashboardData = async () => {
     try {
-      if (!storeId) {
-        return;
-      }
+      if (!storeId) return;
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
       const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 
-    const [
-      todaySalesRes,
-      monthSalesRes,
-      cashSessionRes,
-      acaiProductRes,
-      todaySaleItemsRes,
-      topProductsRes,
-      lastSalesRes,
-      stockMovementsRes,
-    ] = await Promise.all([
-      supabase
-        .from('sales')
-        .select('total_amount')
-        .eq('store_id', storeId)
-        .gte('created_at', today.toISOString()),
+      const [
+        todaySalesRes,
+        monthSalesRes,
+        cashSessionRes,
+        acaiProductRes,
+        todaySaleItemsRes,
+        topProductsRes,
+        lastSalesRes,
+        stockMovementsRes,
+      ] = await Promise.all([
+        supabase
+          .from('sales')
+          .select('total_amount')
+          .eq('store_id', storeId)
+          .gte('created_at', today.toISOString()),
 
-      supabase
-        .from('sales')
-        .select('total_amount')
-        .eq('store_id', storeId)
-        .gte('created_at', firstDayOfMonth.toISOString()),
+        supabase
+          .from('sales')
+          .select('total_amount')
+          .eq('store_id', storeId)
+          .gte('created_at', firstDayOfMonth.toISOString()),
 
-      supabase
-        .from('cash_sessions')
-        .select('status')
-        .eq('store_id', storeId)
-        .eq('status', 'open')
-        .maybeSingle(),
+        supabase
+          .from('cash_sessions')
+          .select('status')
+          .eq('store_id', storeId)
+          .eq('status', 'open')
+          .maybeSingle(),
 
-      supabase
-        .from('products')
-        .select('id')
-        .eq('store_id', storeId)
-        .eq('name', 'Açaí por Kg')
-        .maybeSingle(),
+        supabase
+          .from('products')
+          .select('id')
+          .eq('store_id', storeId)
+          .eq('name', 'Açaí por Kg')
+          .maybeSingle(),
 
-      supabase
-        .from('sale_items')
-        .select('weight, sale_id')
-        .gte('created_at', today.toISOString()),
+        supabase
+          .from('sale_items')
+          .select('weight, sale_id')
+          .gte('created_at', today.toISOString()),
 
-      supabase
-        .from('sale_items')
-        .select('product_id, quantity, products!inner(name, price)')
-        .gte('created_at', today.toISOString()),
+        supabase
+          .from('sale_items')
+          .select('product_id, quantity, products!inner(name, price)')
+          .gte('created_at', today.toISOString()),
 
-      supabase
-        .from('sales')
-        .select('id, created_at, total_amount, payment_method')
-        .eq('store_id', storeId)
-        .order('created_at', { ascending: false })
-        .limit(5),
+        supabase
+          .from('sales')
+          .select('id, created_at, total_amount, payment_method')
+          .eq('store_id', storeId)
+          .order('created_at', { ascending: false })
+          .limit(5),
 
-      supabase
-        .from('stock_movements')
-        .select('*, stock_items!inner(name)')
-        .eq('store_id', storeId)
-        .order('created_at', { ascending: false })
-        .limit(5),
-    ]);
+        supabase
+          .from('stock_movements')
+          .select('*, stock_items!inner(name)')
+          .eq('store_id', storeId)
+          .order('created_at', { ascending: false })
+          .limit(5),
+      ]);
 
-    const todayTotal = todaySalesRes.data?.reduce((sum, s) => sum + Number(s.total_amount), 0) || 0;
-    const monthTotal = monthSalesRes.data?.reduce((sum, s) => sum + Number(s.total_amount), 0) || 0;
-    const cashStatus = cashSessionRes.data ? 'open' : 'closed';
+      const todayTotal =
+        todaySalesRes.data?.reduce((sum, s) => sum + Number(s.total_amount), 0) || 0;
 
-    let acaiSold = 0;
-    if (acaiProductRes.data && todaySaleItemsRes.data) {
-      const todaySaleIds = new Set((await supabase
-        .from('sales')
-        .select('id')
-        .eq('store_id', storeId)
-        .gte('created_at', today.toISOString())).data?.map(s => s.id) || []);
+      const monthTotal =
+        monthSalesRes.data?.reduce((sum, s) => sum + Number(s.total_amount), 0) || 0;
 
-      const totalGrams = todaySaleItemsRes.data
-        .filter((item: any) => todaySaleIds.has(item.sale_id) && item.weight)
-        .reduce((sum, item: any) => sum + Number(item.weight || 0), 0);
+      const cashStatus = cashSessionRes.data ? 'open' : 'closed';
 
-      acaiSold = totalGrams / 1000;
-    }
+      let acaiSold = 0;
+      if (acaiProductRes.data && todaySaleItemsRes.data) {
+        const todaySaleIds = new Set(
+          (
+            await supabase
+              .from('sales')
+              .select('id')
+              .eq('store_id', storeId)
+              .gte('created_at', today.toISOString())
+          ).data?.map((s) => s.id) || []
+        );
 
-    const productSales = new Map();
-    if (topProductsRes.data) {
-      for (const item of topProductsRes.data) {
-        const product = (item as any).products;
-        if (!product) continue;
+        const totalGrams = todaySaleItemsRes.data
+          .filter((item: any) => todaySaleIds.has(item.sale_id) && item.weight)
+          .reduce((sum, item: any) => sum + Number(item.weight || 0), 0);
 
-        const key = product.name;
-        if (!productSales.has(key)) {
-          productSales.set(key, { name: key, quantity: 0, revenue: 0 });
-        }
-        const existing = productSales.get(key);
-        existing.quantity += Number((item as any).quantity);
-        existing.revenue += Number((item as any).quantity) * Number(product.price);
+        acaiSold = totalGrams / 1000;
       }
-    }
 
-    const topProductsArray = Array.from(productSales.values())
-      .sort((a, b) => b.quantity - a.quantity)
-      .slice(0, 5);
+      const productSales = new Map();
+      if (topProductsRes.data) {
+        for (const item of topProductsRes.data) {
+          const product = (item as any).products;
+          if (!product) continue;
 
-    const alertsList: Alert[] = [];
+          const key = product.name;
+          if (!productSales.has(key)) {
+            productSales.set(key, { name: key, quantity: 0, revenue: 0 });
+          }
+          const existing = productSales.get(key);
+          existing.quantity += Number((item as any).quantity);
+          existing.revenue += Number((item as any).quantity) * Number(product.price);
+        }
+      }
 
-    if (!cashSessionRes.data) {
-      alertsList.push({
-        type: 'warning',
-        message: 'Nenhum caixa aberto',
+      const topProductsArray = Array.from(productSales.values())
+        .sort((a, b) => b.quantity - a.quantity)
+        .slice(0, 5);
+
+      const alertsList: Alert[] = [];
+
+      if (!cashSessionRes.data) {
+        alertsList.push({
+          type: 'warning',
+          message: 'Nenhum caixa aberto',
+        });
+      }
+
+      setMetrics({
+        todaySales: todayTotal,
+        monthSales: monthTotal,
+        cashStatus: cashStatus as 'open' | 'closed',
+        acaiSoldToday: acaiSold,
       });
-    }
-
-    setMetrics({
-      todaySales: todayTotal,
-      monthSales: monthTotal,
-      cashStatus: cashStatus as 'open' | 'closed',
-      acaiSoldToday: acaiSold,
-    });
 
       setTopProducts(topProductsArray);
       setAlerts(alertsList);
@@ -249,25 +259,40 @@ export default function Dashboard() {
       title: 'Vendas Hoje',
       value: `R$ ${formatMoney(metrics.todaySales)}`,
       icon: <DollarSign className="w-6 h-6" />,
-      color: 'bg-green-50 text-green-600',
+      color: 'bg-green-50 text-green-600 border-green-100',
+      subtitle: 'Resumo do dia atual',
     },
     {
       title: 'Vendas no Mês',
       value: `R$ ${formatMoney(metrics.monthSales)}`,
       icon: <TrendingUp className="w-6 h-6" />,
-      color: 'bg-blue-50 text-blue-600',
+      color: 'bg-blue-50 text-blue-600 border-blue-100',
+      subtitle: 'Acumulado mensal',
     },
     {
       title: 'Status do Caixa',
       value: metrics.cashStatus === 'open' ? 'Caixa Aberto' : 'Caixa Fechado',
-      icon: metrics.cashStatus === 'open' ? <DoorOpen className="w-6 h-6" /> : <DoorClosed className="w-6 h-6" />,
-      color: metrics.cashStatus === 'open' ? 'bg-green-50 text-green-600' : 'bg-gray-50 text-gray-600',
+      icon:
+        metrics.cashStatus === 'open' ? (
+          <DoorOpen className="w-6 h-6" />
+        ) : (
+          <DoorClosed className="w-6 h-6" />
+        ),
+      color:
+        metrics.cashStatus === 'open'
+          ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
+          : 'bg-gray-50 text-gray-600 border-gray-200',
+      subtitle:
+        metrics.cashStatus === 'open'
+          ? 'Operação liberada'
+          : 'Necessário abrir caixa',
     },
     {
       title: 'Açaí Vendido Hoje',
       value: `${formatQuantity(metrics.acaiSoldToday, 'kg')} kg`,
       icon: <Weight className="w-6 h-6" />,
-      color: 'bg-amber-50 text-amber-600',
+      color: 'bg-amber-50 text-amber-600 border-amber-100',
+      subtitle: 'Consumo diário',
     },
   ];
 
@@ -275,36 +300,59 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6 w-full max-w-full">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-sm sm:text-base text-gray-600 mt-1">Resumo geral da operação de hoje</p>
+      {/* Cabeçalho */}
+      <div className="bg-white rounded-3xl border border-gray-200 shadow-sm p-5 sm:p-6">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="bg-primary/10 p-3 rounded-2xl">
+            <LayoutDashboard className="w-6 h-6 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Dashboard</h1>
+            <p className="text-sm sm:text-base text-gray-600 mt-1">
+              Resumo geral da operação de hoje
+            </p>
+          </div>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* Cards principais */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
         {statCards.map((card, index) => (
-          <div key={index} className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-            <div className="flex items-center justify-between mb-4">
-              <div className={`p-3 rounded-lg ${card.color}`}>
-                {card.icon}
-              </div>
+          <div
+            key={index}
+            className="bg-white rounded-3xl shadow-sm p-5 border border-gray-200 hover:shadow-md transition"
+          >
+            <div className="flex items-start justify-between mb-5">
+              <div className={`p-3 rounded-2xl border ${card.color}`}>{card.icon}</div>
             </div>
-            <div className="text-2xl font-bold text-gray-900 mb-1">{card.value}</div>
-            <div className="text-sm text-gray-600">{card.title}</div>
+
+            <div className="text-2xl font-black text-gray-900 mb-1">{card.value}</div>
+            <div className="text-sm font-semibold text-gray-700">{card.title}</div>
+            <div className="text-xs text-gray-500 mt-1">{card.subtitle}</div>
           </div>
         ))}
       </div>
 
-      {alerts.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-          <div className="flex items-center gap-2 mb-4">
-            <AlertTriangle className="w-5 h-5 text-orange-500" />
-            <h2 className="text-xl font-bold text-gray-900">Alertas</h2>
+      {/* Alertas */}
+      {alerts.length > 0 ? (
+        <div className="bg-white rounded-3xl shadow-sm p-6 border border-gray-200">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="bg-yellow-50 p-3 rounded-2xl border border-yellow-100">
+              <ShieldAlert className="w-5 h-5 text-yellow-600" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">Alertas Operacionais</h2>
+              <p className="text-sm text-gray-500">
+                Pontos que exigem sua atenção agora
+              </p>
+            </div>
           </div>
+
           <div className="space-y-3">
             {alerts.map((alert, index) => (
               <div
                 key={index}
-                className={`flex items-center gap-3 p-4 rounded-lg border ${
+                className={`flex items-center gap-3 p-4 rounded-2xl border ${
                   alert.type === 'critical'
                     ? 'bg-red-50 border-red-200'
                     : alert.type === 'warning'
@@ -321,46 +369,72 @@ export default function Dashboard() {
                       : 'bg-blue-100 text-blue-700'
                   }`}
                 >
-                  {alert.type === 'critical' ? 'CRÍTICO' : alert.type === 'warning' ? 'ATENÇÃO' : 'INFO'}
+                  {alert.type === 'critical'
+                    ? 'CRÍTICO'
+                    : alert.type === 'warning'
+                    ? 'ATENÇÃO'
+                    : 'INFO'}
                 </span>
                 <span className="text-gray-900 font-medium">{alert.message}</span>
               </div>
             ))}
           </div>
         </div>
-      )}
-
-      {alerts.length === 0 && (
-        <div className="bg-white rounded-xl shadow-sm p-8 border border-gray-100 text-center">
-          <Package className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-          <p className="text-gray-600">Nenhum alerta no momento</p>
+      ) : (
+        <div className="bg-white rounded-3xl shadow-sm p-8 border border-gray-200 text-center">
+          <div className="bg-green-50 w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4 border border-green-100">
+            <Package className="w-7 h-7 text-green-600" />
+          </div>
+          <p className="text-gray-700 font-medium">Nenhum alerta no momento</p>
+          <p className="text-sm text-gray-500 mt-1">
+            Sua operação está estável agora
+          </p>
         </div>
       )}
 
+      {/* Estoque inteligente */}
       <DashboardStockInsights storeId={storeId} />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-          <div className="flex items-center gap-2 mb-4">
-            <ShoppingCart className="w-5 h-5 text-gray-700" />
-            <h2 className="text-xl font-bold text-gray-900">Produtos Mais Vendidos Hoje</h2>
+      {/* Blocos centrais */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        {/* Produtos mais vendidos */}
+        <div className="bg-white rounded-3xl shadow-sm p-6 border border-gray-200">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="bg-blue-50 p-3 rounded-2xl border border-blue-100">
+              <BarChart3 className="w-5 h-5 text-blue-600" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">Produtos Mais Vendidos Hoje</h2>
+              <p className="text-sm text-gray-500">
+                Ranking diário de saída e receita
+              </p>
+            </div>
           </div>
+
           {topProducts.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="border-b border-gray-200">
                   <tr>
-                    <th className="text-left py-3 text-sm font-semibold text-gray-900">Produto</th>
-                    <th className="text-right py-3 text-sm font-semibold text-gray-900">Quantidade</th>
-                    <th className="text-right py-3 text-sm font-semibold text-gray-900">Receita</th>
+                    <th className="text-left py-3 text-sm font-semibold text-gray-900">
+                      Produto
+                    </th>
+                    <th className="text-right py-3 text-sm font-semibold text-gray-900">
+                      Quantidade
+                    </th>
+                    <th className="text-right py-3 text-sm font-semibold text-gray-900">
+                      Receita
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {topProducts.map((product, index) => (
                     <tr key={index} className="hover:bg-gray-50">
-                      <td className="py-3 text-sm text-gray-900">{product.name}</td>
-                      <td className="py-3 text-sm text-right text-gray-900">{product.quantity}</td>
-                      <td className="py-3 text-sm text-right font-semibold text-green-600">
+                      <td className="py-3 text-sm text-gray-900 font-medium">{product.name}</td>
+                      <td className="py-3 text-sm text-right text-gray-900">
+                        {product.quantity}
+                      </td>
+                      <td className="py-3 text-sm text-right font-bold text-green-600">
                         R$ {formatMoney(product.revenue)}
                       </td>
                     </tr>
@@ -369,27 +443,36 @@ export default function Dashboard() {
               </table>
             </div>
           ) : (
-            <div className="text-center py-8 text-gray-400">
+            <div className="text-center py-10 text-gray-400">
               <ShoppingCart className="w-10 h-10 mx-auto mb-3 opacity-50" />
               <p>Nenhuma venda registrada hoje</p>
             </div>
           )}
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-          <div className="flex items-center gap-2 mb-4">
-            <CreditCard className="w-5 h-5 text-gray-700" />
-            <h2 className="text-xl font-bold text-gray-900">Últimas Vendas</h2>
+        {/* Últimas vendas */}
+        <div className="bg-white rounded-3xl shadow-sm p-6 border border-gray-200">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="bg-emerald-50 p-3 rounded-2xl border border-emerald-100">
+              <CreditCard className="w-5 h-5 text-emerald-600" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">Últimas Vendas</h2>
+              <p className="text-sm text-gray-500">
+                Movimentações mais recentes da operação
+              </p>
+            </div>
           </div>
+
           {lastSales.length > 0 ? (
             <div className="space-y-3">
               {lastSales.map((sale) => (
                 <div
                   key={sale.id}
-                  className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200"
+                  className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-200"
                 >
                   <div>
-                    <div className="font-semibold text-gray-900">
+                    <div className="font-bold text-gray-900">
                       R$ {formatMoney(Number(sale.total_amount))}
                     </div>
                     <div className="text-xs text-gray-600 flex items-center gap-2 mt-1">
@@ -402,14 +485,15 @@ export default function Dashboard() {
                       })}
                     </div>
                   </div>
-                  <span className="px-3 py-1 bg-white rounded text-xs font-medium text-gray-700 border border-gray-300">
+
+                  <span className="px-3 py-1 bg-white rounded-xl text-xs font-medium text-gray-700 border border-gray-300">
                     {getPaymentMethodLabel(sale.payment_method)}
                   </span>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="text-center py-8 text-gray-400">
+            <div className="text-center py-10 text-gray-400">
               <CreditCard className="w-10 h-10 mx-auto mb-3 opacity-50" />
               <p>Nenhuma venda registrada</p>
             </div>
@@ -417,30 +501,47 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-        <div className="flex items-center gap-2 mb-4">
-          <ArrowUpDown className="w-5 h-5 text-gray-700" />
-          <h2 className="text-xl font-bold text-gray-900">Últimas Movimentações de Estoque</h2>
+      {/* Estoque */}
+      <div className="bg-white rounded-3xl shadow-sm p-6 border border-gray-200">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="bg-amber-50 p-3 rounded-2xl border border-amber-100">
+            <Boxes className="w-5 h-5 text-amber-600" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">Últimas Movimentações de Estoque</h2>
+            <p className="text-sm text-gray-500">
+              Entradas, saídas e ajustes mais recentes
+            </p>
+          </div>
         </div>
+
         {stockMovements.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="border-b border-gray-200">
                 <tr>
-                  <th className="text-left py-3 text-sm font-semibold text-gray-900">Item</th>
-                  <th className="text-left py-3 text-sm font-semibold text-gray-900">Tipo</th>
-                  <th className="text-right py-3 text-sm font-semibold text-gray-900">Quantidade</th>
-                  <th className="text-right py-3 text-sm font-semibold text-gray-900">Data/Hora</th>
+                  <th className="text-left py-3 text-sm font-semibold text-gray-900">
+                    Item
+                  </th>
+                  <th className="text-left py-3 text-sm font-semibold text-gray-900">
+                    Tipo
+                  </th>
+                  <th className="text-right py-3 text-sm font-semibold text-gray-900">
+                    Quantidade
+                  </th>
+                  <th className="text-right py-3 text-sm font-semibold text-gray-900">
+                    Data/Hora
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {stockMovements.map((movement) => (
                   <tr key={movement.id} className="hover:bg-gray-50">
-                    <td className="py-3 text-sm text-gray-900">
+                    <td className="py-3 text-sm text-gray-900 font-medium">
                       {(movement as any).stock_items?.name || 'Item desconhecido'}
                     </td>
                     <td className="py-3 text-sm">
-                      <span className="px-2 py-1 bg-gray-100 rounded text-xs font-medium text-gray-700">
+                      <span className="px-2.5 py-1 bg-gray-100 rounded-xl text-xs font-medium text-gray-700">
                         {getMovementTypeLabel(movement.type)}
                       </span>
                     </td>
@@ -461,7 +562,7 @@ export default function Dashboard() {
             </table>
           </div>
         ) : (
-          <div className="text-center py-8 text-gray-400">
+          <div className="text-center py-10 text-gray-400">
             <ArrowUpDown className="w-10 h-10 mx-auto mb-3 opacity-50" />
             <p>Nenhuma movimentação de estoque</p>
           </div>

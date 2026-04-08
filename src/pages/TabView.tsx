@@ -238,10 +238,16 @@ export default function TabView() {
       if (!confirmClose) return;
 
       try {
+        const now = new Date().toISOString();
+
         const { error } = await supabase
           .from('tabs')
-          .update({ status: 'closed' })
-          .eq('id', tab.id);
+          .update({
+            status: 'closed',
+            closed_at: now,
+          })
+          .eq('id', tab.id)
+          .eq('store_id', storeId);
 
         if (error) throw error;
 

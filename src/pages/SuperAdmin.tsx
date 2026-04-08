@@ -15,15 +15,12 @@ import {
   Clock,
   ArrowRight,
   Gift,
-  Crown,
   RefreshCcw,
-  BadgeCheck,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../lib/formatters';
 import { getAllPlans, calculateMRRFromPlans } from '../lib/planPricing';
 import StoreDetailsModal from '../components/StoreDetailsModal';
-import type { Database } from '../lib/database.types';
 
 interface StoreData {
   id: string;
@@ -33,6 +30,7 @@ interface StoreData {
   subscription_status: string;
   plan_name: string | null;
   created_at: string;
+  subscription_ends_at?: string | null;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
   is_blocked: boolean;
@@ -52,6 +50,21 @@ interface DashboardStats {
     premium: number;
   };
   mrr: number;
+}
+
+function truncateStripeId(value: string | null, start = 8, end = 4) {
+  if (!value) return '—';
+  if (value.length <= start + end + 3) return value;
+  return `${value.slice(0, start)}...${value.slice(-end)}`;
+}
+
+function formatDateBR(value?: string | null) {
+  if (!value) return '—';
+  try {
+    return new Date(value).toLocaleDateString('pt-BR');
+  } catch {
+    return '—';
+  }
 }
 
 export default function SuperAdmin() {
@@ -98,7 +111,7 @@ export default function SuperAdmin() {
       if (storesResult.error) throw storesResult.error;
       if (usersResult.error) throw usersResult.error;
 
-      const storesData = storesResult.data || [];
+      const storesData = (storesResult.data || []) as StoreData[];
 
       const storesWithOwnerEmails = await Promise.all(
         storesData.map(async (store) => {
@@ -197,6 +210,27 @@ export default function SuperAdmin() {
     };
 
     return planLabels[plan || ''] || plan || 'Starter';
+  };
+
+  const hasStripeCustomer = (store: StoreData) =>
+    Boolean(store.stripe_customer_id && store.stripe_customer_id.trim());
+
+  const hasStripeSubscription = (store: StoreData) =>
+    Boolean(store.stripe_subscription_id && store.stripe_subscription_id.trim());
+
+  const isPaidStore = (store: StoreData) => store.access_mode === 'paid';
+
+  const canSyncStripe = (store: StoreData) => {
+    if (!isPaidStore(store)) return false;
+    return hasStripeCustomer(store) || hasStripeSubscription(store);
+  };
+
+  const canCancelStripe = (store: StoreData) => {
+    if (!isPaidStore(store)) return false;
+    if (!hasStripeSubscription(store)) return false;
+    if (store.is_blocked) return false;
+
+    return ['active', 'trial', 'past_due'].includes(store.subscription_status);
   };
 
   const handleAccessStore = async (storeId: string) => {
@@ -463,6 +497,9 @@ export default function SuperAdmin() {
                   Stripe
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wide text-gray-500">
+                  Válida até
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wide text-gray-500">
                   Criada em
                 </th>
                 <th className="px-6 py-4 text-right text-xs font-bold uppercase tracking-wide text-gray-500">
@@ -474,7 +511,7 @@ export default function SuperAdmin() {
             <tbody className="divide-y divide-gray-100">
               {filteredStores.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-10 text-center text-gray-500">
+                  <td colSpan={8} className="px-6 py-10 text-center text-gray-500">
                     {searchTerm
                       ? 'Nenhuma loja encontrada com esse filtro.'
                       : 'Nenhuma loja cadastrada ainda.'}
@@ -532,15 +569,44 @@ export default function SuperAdmin() {
                     </td>
 
                     <td className="px-6 py-4">
-                      <div className="space-y-1 text-xs text-gray-500">
-                        <div>
-                          <span className="font-medium text-gray-600">Cus:</span>{' '}
-                          {store.stripe_customer_id ? 'Vinculado' : '—'}
+                      <div className="space-y-2 text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="min-w-[36px] font-medium text-gray-600">Cus:</span>
+                          {hasStripeCustomer(store) ? (
+                            <span
+                              className="inline-flex rounded-full bg-green-100 px-2 py-0.5 font-medium text-green-700"
+                              title={store.stripe_customer_id || ''}
+                            >
+                              {truncateStripeId(store.stripe_customer_id)}
+                            </span>
+                          ) : (
+                            <span className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-gray-600">
+                              Não vinculado
+                            </span>
+                          )}
                         </div>
-                        <div>
-                          <span className="font-medium text-gray-600">Sub:</span>{' '}
-                          {store.stripe_subscription_id ? 'Vinculada' : '—'}
+
+                        <div className="flex items-center gap-2">
+                          <span className="min-w-[36px] font-medium text-gray-600">Sub:</span>
+                          {hasStripeSubscription(store) ? (
+                            <span
+                              className="inline-flex rounded-full bg-blue-100 px-2 py-0.5 font-medium text-blue-700"
+                              title={store.stripe_subscription_id || ''}
+                            >
+                              {truncateStripeId(store.stripe_subscription_id)}
+                            </span>
+                          ) : (
+                            <span className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-gray-600">
+                              Não vinculada
+                            </span>
+                          )}
                         </div>
+                      </div>
+                    </td>
+
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-gray-500">
+                        {formatDateBR(store.subscription_ends_at)}
                       </div>
                     </td>
 
@@ -571,43 +637,47 @@ export default function SuperAdmin() {
                           )}
                         </button>
 
-                        <button
-                          onClick={() => handleSyncSubscription(store.id)}
-                          disabled={syncingStore === store.id}
-                          className="inline-flex items-center gap-1.5 rounded-xl bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
-                          title="Sincronizar assinatura com Stripe"
-                        >
-                          {syncingStore === store.id ? (
-                            <>
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                              <span>Sync...</span>
-                            </>
-                          ) : (
-                            <>
-                              <RefreshCcw className="h-4 w-4" />
-                              <span>Sync Stripe</span>
-                            </>
-                          )}
-                        </button>
+                        {canSyncStripe(store) && (
+                          <button
+                            onClick={() => handleSyncSubscription(store.id)}
+                            disabled={syncingStore === store.id}
+                            className="inline-flex items-center gap-1.5 rounded-xl bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+                            title="Sincronizar assinatura com Stripe"
+                          >
+                            {syncingStore === store.id ? (
+                              <>
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                <span>Sync...</span>
+                              </>
+                            ) : (
+                              <>
+                                <RefreshCcw className="h-4 w-4" />
+                                <span>Sync Stripe</span>
+                              </>
+                            )}
+                          </button>
+                        )}
 
-                        <button
-                          onClick={() => handleCancelSubscription(store.id)}
-                          disabled={cancellingStore === store.id}
-                          className="inline-flex items-center gap-1.5 rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
-                          title="Cancelar assinatura no fim do ciclo"
-                        >
-                          {cancellingStore === store.id ? (
-                            <>
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                              <span>Cancelando...</span>
-                            </>
-                          ) : (
-                            <>
-                              <Ban className="h-4 w-4" />
-                              <span>Cancelar</span>
-                            </>
-                          )}
-                        </button>
+                        {canCancelStripe(store) && (
+                          <button
+                            onClick={() => handleCancelSubscription(store.id)}
+                            disabled={cancellingStore === store.id}
+                            className="inline-flex items-center gap-1.5 rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                            title="Cancelar assinatura no fim do ciclo"
+                          >
+                            {cancellingStore === store.id ? (
+                              <>
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                <span>Cancelando...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Ban className="h-4 w-4" />
+                                <span>Cancelar</span>
+                              </>
+                            )}
+                          </button>
+                        )}
 
                         <button
                           onClick={() => setSelectedStoreId(store.id)}
@@ -681,17 +751,46 @@ export default function SuperAdmin() {
                     )}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 rounded-2xl bg-gray-50 p-3 text-xs text-gray-600">
+                  <div className="grid grid-cols-1 gap-3 rounded-2xl bg-gray-50 p-3 text-xs text-gray-600">
                     <div>
-                      <div className="font-semibold text-gray-700">Stripe Customer</div>
-                      <div>{store.stripe_customer_id ? 'Vinculado' : '—'}</div>
+                      <div className="mb-1 font-semibold text-gray-700">Stripe Customer</div>
+                      {hasStripeCustomer(store) ? (
+                        <span
+                          className="inline-flex rounded-full bg-green-100 px-2 py-0.5 font-medium text-green-700"
+                          title={store.stripe_customer_id || ''}
+                        >
+                          {truncateStripeId(store.stripe_customer_id)}
+                        </span>
+                      ) : (
+                        <span className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-gray-600">
+                          Não vinculado
+                        </span>
+                      )}
                     </div>
+
                     <div>
-                      <div className="font-semibold text-gray-700">Stripe Subscription</div>
-                      <div>{store.stripe_subscription_id ? 'Vinculada' : '—'}</div>
+                      <div className="mb-1 font-semibold text-gray-700">Stripe Subscription</div>
+                      {hasStripeSubscription(store) ? (
+                        <span
+                          className="inline-flex rounded-full bg-blue-100 px-2 py-0.5 font-medium text-blue-700"
+                          title={store.stripe_subscription_id || ''}
+                        >
+                          {truncateStripeId(store.stripe_subscription_id)}
+                        </span>
+                      ) : (
+                        <span className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-gray-600">
+                          Não vinculada
+                        </span>
+                      )}
                     </div>
-                    <div className="col-span-2">
-                      <div className="font-semibold text-gray-700">Criada em</div>
+
+                    <div>
+                      <div className="mb-1 font-semibold text-gray-700">Válida até</div>
+                      <div>{formatDateBR(store.subscription_ends_at)}</div>
+                    </div>
+
+                    <div>
+                      <div className="mb-1 font-semibold text-gray-700">Criada em</div>
                       <div>{new Date(store.created_at).toLocaleDateString('pt-BR')}</div>
                     </div>
                   </div>
@@ -723,41 +822,45 @@ export default function SuperAdmin() {
                       <span>Detalhes</span>
                     </button>
 
-                    <button
-                      onClick={() => handleSyncSubscription(store.id)}
-                      disabled={syncingStore === store.id}
-                      className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {syncingStore === store.id ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          <span>Sync...</span>
-                        </>
-                      ) : (
-                        <>
-                          <RefreshCcw className="h-4 w-4" />
-                          <span>Sync Stripe</span>
-                        </>
-                      )}
-                    </button>
+                    {canSyncStripe(store) && (
+                      <button
+                        onClick={() => handleSyncSubscription(store.id)}
+                        disabled={syncingStore === store.id}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {syncingStore === store.id ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span>Sync...</span>
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCcw className="h-4 w-4" />
+                            <span>Sync Stripe</span>
+                          </>
+                        )}
+                      </button>
+                    )}
 
-                    <button
-                      onClick={() => handleCancelSubscription(store.id)}
-                      disabled={cancellingStore === store.id}
-                      className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {cancellingStore === store.id ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          <span>Cancelando...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Ban className="h-4 w-4" />
-                          <span>Cancelar</span>
-                        </>
-                      )}
-                    </button>
+                    {canCancelStripe(store) && (
+                      <button
+                        onClick={() => handleCancelSubscription(store.id)}
+                        disabled={cancellingStore === store.id}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {cancellingStore === store.id ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span>Cancelando...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Ban className="h-4 w-4" />
+                            <span>Cancelar</span>
+                          </>
+                        )}
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -816,9 +919,9 @@ export default function SuperAdmin() {
                 <span className="font-medium text-gray-700">Gerenciamento de Assinaturas</span>
               </div>
               <p className="ml-5 text-sm text-gray-600">
-                Gerenciamento manual de planos funcionando. Integração administrativa
-                com Stripe parcialmente implementada: sincronização e cancelamento.
-                Ainda faltam histórico de pagamentos, reembolsos e gestão avançada.
+                Integração administrativa com Stripe parcialmente implementada:
+                sincronização e cancelamento já funcionam. Ainda faltam histórico de
+                pagamentos, reembolsos, reativação e gestão avançada.
               </p>
             </div>
           </div>

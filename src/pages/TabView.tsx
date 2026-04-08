@@ -232,9 +232,29 @@ export default function TabView() {
     }
 
     if (items.length === 0) {
-      alert('Não é possível fechar uma comanda sem itens');
-      return;
-    }
+  const confirmClose = window.confirm(
+    'Esta comanda não possui itens.\nDeseja fechar mesmo assim?'
+  );
+
+  if (!confirmClose) return;
+
+  // 🔥 Fecha direto sem abrir modal de pagamento
+  try {
+    const { error } = await supabase
+      .from('tabs')
+      .update({ status: 'closed' })
+      .eq('id', tab.id);
+
+    if (error) throw error;
+
+    navigate('/app/tables');
+  } catch (error) {
+    console.error('Erro ao fechar comanda vazia:', error);
+    alert('Erro ao fechar comanda');
+  }
+
+  return;
+}
 
     setShowCheckoutModal(true);
   };

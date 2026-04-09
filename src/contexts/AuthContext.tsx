@@ -151,17 +151,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const continueProfileSetup = async (data: Profile, userId: string) => {
-    logger.log('👤 [fetchProfile] Profile data:', { id: data.id, email: data.email, store_id: data.store_id, role: data.role, is_system_admin: data.is_system_admin });
+    logger.log('👤 [fetchProfile] Profile data:', {
+      id: data.id,
+      email: data.email,
+      store_id: data.store_id,
+      role: data.role,
+      is_system_admin: data.is_system_admin
+    });
+
     setProfile(data);
 
     const diagnosticResults: Record<string, { duration: number; status: string; timedOut: boolean }> = {};
 
-    // Set super admin status from profiles.role
     const isSuperAdminUser = data.role === 'super_admin';
     logger.log('🔐 [fetchProfile] Super admin status:', isSuperAdminUser);
     setIsSuperAdmin(isSuperAdminUser);
 
-    // Set system admin status from profiles.is_system_admin (legacy, will be deprecated)
     const isSystemAdminUser = data.is_system_admin || false;
     logger.log('🔐 [fetchProfile] System admin status (legacy):', isSystemAdminUser);
     setIsSystemAdmin(isSystemAdminUser);
@@ -171,12 +176,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logger.log('🔍 [fetchProfile] Checking for active support session...');
     const supportSessionResult = await timedQuery(
       'admin_support_sessions',
-      () => supabase
-        .from('admin_support_sessions')
-        .select('*')
-        .eq('admin_user_id', userId)
-        .eq('is_active', true)
-        .maybeSingle(),
+      () =>
+        supabase
+          .from('admin_support_sessions')
+          .select('*')
+          .eq('admin_user_id', userId)
+          .eq('is_active', true)
+          .maybeSingle(),
       2500
     );
 
@@ -204,11 +210,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const targetStoreResult = await timedQuery(
         'stores_target_support',
-        () => supabase
-          .from('stores')
-          .select('*')
-          .eq('id', activeSupportSession.target_store_id)
-          .maybeSingle(),
+        () =>
+          supabase
+            .from('stores')
+            .select('*')
+            .eq('id', activeSupportSession.target_store_id)
+            .maybeSingle(),
         2500
       );
 
@@ -244,11 +251,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const storeDataResult = await timedQuery(
         'stores_user_store',
-        () => supabase
-          .from('stores')
-          .select('*')
-          .eq('id', data.store_id)
-          .maybeSingle(),
+        () =>
+          supabase
+            .from('stores')
+            .select('*')
+            .eq('id', data.store_id)
+            .maybeSingle(),
         2500
       );
 
@@ -280,11 +288,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsSubscriptionBlocked(false);
       }
     } else {
-      // No store_id - check if super_admin or regular user
       if (isSuperAdminUser) {
         logger.log('👑 [fetchProfile] Super admin with no store_id (expected)');
         setStore(null);
-        setHasValidStore(true); // Super admin doesn't need a store
+        setHasValidStore(true);
         setIsSubscriptionBlocked(false);
         setUserRole(null);
         setStoreId(null);
@@ -304,9 +311,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     setStoreId(currentStoreId);
 
-    // Fetch role from store_users
     if (currentStoreId) {
-      // SUPPORT MODE OVERRIDE: Super admin in support mode gets owner-level access
       if (isSuperAdminUser && activeSupportSession) {
         logger.log('👑 [fetchProfile] Super admin in support mode → granting owner role');
         setUserRole('owner');
@@ -315,13 +320,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const storeUserRoleResult = await timedQuery(
           'store_users_fetch_role',
-          () => supabase
-            .from('store_users')
-            .select('role')
-            .eq('user_id', userId)
-            .eq('store_id', currentStoreId)
-            .eq('is_active', true)
-            .maybeSingle(),
+          () =>
+            supabase
+              .from('store_users')
+              .select('role')
+              .eq('user_id', userId)
+              .eq('store_id', currentStoreId)
+              .eq('is_active', true)
+              .maybeSingle(),
           2500
         );
 
@@ -379,21 +385,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logger.error(`❌ [fetchProfile] Error fetching profile (attempt ${attemptNumber}):`, profileError);
         console.error('[Auth] Profile query error:', profileError);
 
-        // Retry logic for transient errors
-        if (attemptNumber < maxAttempts && (
-          profileError.message?.includes('timeout') ||
-          profileError.message?.includes('network') ||
-          profileError.message?.includes('fetch')
-        )) {
+        if (
+          attemptNumber < maxAttempts &&
+          (
+            profileError.message?.includes('timeout') ||
+            profileError.message?.includes('network') ||
+            profileError.message?.includes('fetch')
+          )
+        ) {
           const delayMs = attemptNumber * 1000;
           logger.log(`⏳ [fetchProfile] Retrying in ${delayMs}ms...`);
           console.log(`[Auth] Retrying fetchProfile in ${delayMs}ms (${attemptNumber}/${maxAttempts})`);
 
-          await new Promise(resolve => setTimeout(resolve, delayMs));
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
           return fetchProfile(userId, attemptNumber + 1);
         }
 
-        // If error is "not found", try to create profile
         if (profileError.code === 'PGRST116') {
           logger.log('🔧 [fetchProfile] Profile not found, creating automatically...');
           console.log('[Auth] Creating missing profile for user:', userId);
@@ -427,7 +434,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        // Fatal error - clear state
         setProfile(null);
         setStore(null);
         setHasValidStore(false);
@@ -463,17 +469,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logger.error(`❌ [fetchProfile] Fatal error (attempt ${attemptNumber}):`, error);
       console.error('[Auth] fetchProfile FATAL ERROR:', error);
 
-      // Retry logic for unexpected errors
       if (attemptNumber < maxAttempts) {
         const delayMs = attemptNumber * 1000;
         logger.log(`⏳ [fetchProfile] Retrying in ${delayMs}ms after fatal error...`);
         console.log(`[Auth] Retrying fetchProfile in ${delayMs}ms (${attemptNumber}/${maxAttempts})`);
 
-        await new Promise(resolve => setTimeout(resolve, delayMs));
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
         return fetchProfile(userId, attemptNumber + 1);
       }
 
-      // Final failure - clear state
       setProfile(null);
       setStore(null);
       setHasValidStore(false);
@@ -488,7 +492,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const fetchProfileWithTimeout = async (userId: string, timeoutMs: number = 15000): Promise<Profile | null> => {
+  const fetchProfileWithTimeout = async (userId: string, timeoutMs: number = 8000): Promise<Profile | null> => {
     logger.log(`⏱️ [fetchProfileWithTimeout] Starting with ${timeoutMs}ms timeout`);
     console.log(`[Auth] fetchProfileWithTimeout: ${timeoutMs}ms timeout for user ${userId}`);
 
@@ -505,7 +509,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logger.error('❌ [fetchProfileWithTimeout] Error or timeout:', error.message);
       console.error('[Auth] fetchProfileWithTimeout caught error:', error.message);
 
-      // Garantir fallback seguro em caso de timeout
       setProfile(null);
       setStore(null);
       setHasValidStore(false);
@@ -514,17 +517,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsSuperAdmin(false);
       setUserRole(null);
       setStoreId(null);
-
-      // CRITICAL: Force logout on persistent failure
-      console.error('[Auth] CRITICAL: Profile fetch failed after all retries. Forcing logout for safety.');
-      logger.error('🚨 [fetchProfileWithTimeout] Profile fetch failed - forcing logout');
-
-      // Wait a bit to allow state to clear
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      // Force logout
-      await supabase.auth.signOut();
-      window.location.href = '/login';
 
       return null;
     });
@@ -565,28 +557,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(session?.user ?? null);
 
         if (session?.user) {
-          logger.log('👤 [initializeAuth] User found, fetching profile...');
-          console.log('[Auth] Profile loading for user:', session.user.id);
-          const profileResult = await fetchProfileWithTimeout(session.user.id, 15000);
-
-          if (profileResult === null) {
-            logger.log('⚠️ [initializeAuth] Profile fetch returned null (timeout or error)');
-            console.log('[Auth] initializeAuth: Profile fetch failed/timeout - user will be logged out');
-          } else {
-            console.log('[Auth] Profile loaded successfully:', {
-              id: profileResult.id,
-              email: profileResult.email,
-              role: profileResult.role,
-              store_id: profileResult.store_id
-            });
-          }
+          logger.log('👤 [initializeAuth] User found, session restored');
+          console.log('[Auth] Session restored for user:', session.user.id);
         } else {
           logger.log('ℹ️ [initializeAuth] No active session');
         }
       } catch (error) {
         logger.error('❌ [initializeAuth] Fatal error:', error);
 
-        // Garantir estado limpo em caso de erro
         if (mounted) {
           setProfile(null);
           setStore(null);
@@ -640,14 +618,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const userId = session?.user?.id;
 
-        // Skip if already fetching for the same user
         if (fetchProfileInProgress && lastFetchedUserId === userId) {
           logger.log('⏭️ [onAuthStateChange] Skipping duplicate fetchProfile for user:', userId);
           console.log('[Auth] SKIP: fetchProfile already in progress for this user');
           return;
         }
 
-        // Use async block inside callback to avoid deadlock
         (async () => {
           try {
             fetchProfileInProgress = true;
@@ -663,11 +639,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (session?.user) {
               console.log('[Auth] Fetching profile for user:', session.user.id);
               console.log('[Auth] Profile loading...');
-              const profileResult = await fetchProfileWithTimeout(session.user.id, 15000);
+              const profileResult = await fetchProfileWithTimeout(session.user.id, 8000);
 
               if (profileResult === null) {
                 logger.log('⚠️ [onAuthStateChange] Profile fetch returned null (timeout or error)');
-                console.log('[Auth] Profile fetch failed/timeout - user will be logged out for safety');
+                console.log('[Auth] Profile fetch failed/timeout - keeping session without forced logout');
               } else {
                 console.log('[Auth] Profile loaded:', {
                   id: profileResult.id,
@@ -684,7 +660,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             logger.error('❌ [onAuthStateChange] Error handling auth change:', error);
             console.error('[Auth] Error in onAuthStateChange:', error);
 
-            // Garantir estado limpo em caso de erro
             setProfile(null);
             setStore(null);
             setHasValidStore(false);
@@ -714,7 +689,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logger.log('🔐 [signIn] Attempting login for:', email);
 
     try {
-      // Validate Turnstile token on backend before proceeding with login
       if (captchaToken) {
         logger.log('🔒 [signIn] Validating Turnstile token on backend...');
 
@@ -929,7 +903,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     logger.log('✅ [startSupportMode] Sessão de suporte criada:', sessionData.id);
 
-    // Atualizar support_mode_store_id no banco de dados
     const { error: profileUpdateError } = await supabase
       .from('profiles')
       .update({ support_mode_store_id: targetStoreId })
@@ -942,7 +915,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     logger.log('✅ [startSupportMode] support_mode_store_id atualizado no banco');
 
-    // Buscar a loja alvo
     const { data: targetStore, error: storeError } = await supabase
       .from('stores')
       .select('*')
@@ -956,19 +928,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     logger.log('✅ [startSupportMode] Loja alvo carregada:', targetStore.name);
 
-    // Atualizar estados manualmente (sem race condition)
     setSupportSession(sessionData);
     setIsSupportMode(true);
     setStore(targetStore);
     setStoreId(targetStoreId);
     setHasValidStore(true);
-    setUserRole(null); // Super admin em modo suporte não tem role
+    setUserRole(null);
     const blocked = checkSubscriptionStatus(targetStore);
     setIsSubscriptionBlocked(blocked);
 
     logger.log('✅ [startSupportMode] Estados atualizados, modo suporte ativo');
 
-    // Log audit trail
     const { logSuperAdminAction } = await import('../lib/superAdminAudit');
     await logSuperAdminAction({
       store_id: targetStoreId,
@@ -989,7 +959,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const targetStoreId = supportSession.target_store_id;
 
-    // Marcar sessão como encerrada
     await supabase
       .from('admin_support_sessions')
       .update({
@@ -998,7 +967,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
       .eq('id', supportSession.id);
 
-    // Limpar support_mode_store_id no banco de dados
     const { error: profileUpdateError } = await supabase
       .from('profiles')
       .update({ support_mode_store_id: null })
@@ -1006,7 +974,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (profileUpdateError) {
       logger.error('❌ [endSupportMode] Erro ao limpar profile:', profileUpdateError);
-      // Não lançar erro, continuar com limpeza
     }
 
     logger.log('✅ [endSupportMode] support_mode_store_id limpo no banco');
@@ -1035,7 +1002,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     logger.log('🔄 [switchSupportStore] Trocando para loja:', targetStoreId);
 
-    // Encerrar sessão atual
     await supabase
       .from('admin_support_sessions')
       .update({
@@ -1046,7 +1012,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     logger.log('✅ [switchSupportStore] Sessão anterior encerrada');
 
-    // Criar nova sessão
     const { data: newSessionData, error: sessionError } = await supabase
       .from('admin_support_sessions')
       .insert({
@@ -1064,7 +1029,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     logger.log('✅ [switchSupportStore] Nova sessão criada:', newSessionData.id);
 
-    // Atualizar support_mode_store_id no banco
     const { error: profileUpdateError } = await supabase
       .from('profiles')
       .update({ support_mode_store_id: targetStoreId })
@@ -1077,7 +1041,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     logger.log('✅ [switchSupportStore] support_mode_store_id atualizado');
 
-    // Buscar nova loja
     const { data: targetStore, error: storeError } = await supabase
       .from('stores')
       .select('*')
@@ -1091,7 +1054,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     logger.log('✅ [switchSupportStore] Nova loja carregada:', targetStore.name);
 
-    // Atualizar estados
     setSupportSession(newSessionData);
     setStore(targetStore);
     setStoreId(targetStoreId);
@@ -1099,7 +1061,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const blocked = checkSubscriptionStatus(targetStore);
     setIsSubscriptionBlocked(blocked);
 
-    // Log audit trail
     const { logSuperAdminAction } = await import('../lib/superAdminAudit');
     await logSuperAdminAction({
       store_id: targetStoreId,
@@ -1115,13 +1076,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logger.log('👋 [signOut] Iniciando logout...');
 
     try {
-      // Encerrar suporte se ativo
       if (supportSession) {
         logger.log('🛠️ [signOut] Encerrando modo suporte...');
         await endSupportMode();
       }
 
-      // Limpar support_mode_store_id se existir
       if (currentUser && (isSuperAdmin || isSystemAdmin)) {
         logger.log('🧹 [signOut] Limpando support_mode_store_id...');
         await supabase
@@ -1130,11 +1089,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .eq('id', currentUser.id);
       }
 
-      // Fazer logout no Supabase
       logger.log('🔐 [signOut] Chamando supabase.auth.signOut()...');
       await supabase.auth.signOut();
 
-      // Limpar TODOS os estados de autenticação de forma síncrona e explícita
       logger.log('🧹 [signOut] Limpando todos os estados...');
       setSession(null);
       setUser(null);
@@ -1150,7 +1107,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsSupportMode(false);
       setLoading(false);
 
-      // Registrar auditoria
       if (currentUser) {
         await logAuditEvent({
           userId: currentUser.id,
@@ -1160,14 +1116,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       logger.log('✅ [signOut] Logout concluído com sucesso');
-
-      // Navegação explícita para /login para evitar tela branca
       logger.log('🔄 [signOut] Redirecionando para /login...');
       window.location.href = '/login';
     } catch (error) {
       logger.error('❌ [signOut] Erro durante logout:', error);
 
-      // Garantir limpeza mesmo em caso de erro
       setSession(null);
       setUser(null);
       setProfile(null);
@@ -1182,21 +1135,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsSupportMode(false);
       setLoading(false);
 
-      // Navegação mesmo em caso de erro
       window.location.href = '/login';
     }
   };
 
   const effectivePlan = getEffectivePlan(store, isSuperAdmin, isSupportMode);
 
-  // CRITICAL: Effective user role for support mode
-  // When super admin is in support mode, they operate as 'owner' in the target store
-  // This allows them to access all store features without actually being a store user
   const effectiveUserRole: UserRole = (isSupportMode && supportSession && storeId)
     ? 'owner'
     : userRole;
 
-  // Role helpers - use effectiveUserRole for all permission checks
   const isOwner = effectiveUserRole === 'owner';
   const isManager = effectiveUserRole === 'manager';
   const isStaff = effectiveUserRole === 'staff';

@@ -15,12 +15,14 @@ import {
   Crown,
   ShieldCheck,
   Clock3,
+  TrendingUp,
 } from 'lucide-react';
 import type { Database } from '../lib/database.types';
 import { logger } from '../lib/logger';
 import { getPlanLimits } from '../lib/planLimits';
 
 type Store = Database['public']['Tables']['stores']['Row'];
+type CheckoutPlan = 'starter' | 'pro' | 'premium';
 
 export default function MySubscription() {
   const { user } = useAuth();
@@ -178,6 +180,29 @@ export default function MySubscription() {
     return planNames[plan?.toLowerCase() || ''] || plan || 'Starter';
   };
 
+  const normalizePlan = (plan: string | null | undefined): CheckoutPlan => {
+    const normalized = (plan || '').toLowerCase();
+
+    if (normalized === 'premium') return 'premium';
+    if (normalized === 'pro' || normalized === 'professional') return 'pro';
+    return 'starter';
+  };
+
+  const getNextPlan = (plan: string | null | undefined): CheckoutPlan | null => {
+    const normalized = normalizePlan(plan);
+
+    if (normalized === 'starter') return 'pro';
+    if (normalized === 'pro') return 'premium';
+    return null;
+  };
+
+  const getUpgradeLabel = (plan: string | null | undefined) => {
+    const nextPlan = getNextPlan(plan);
+    if (nextPlan === 'pro') return 'Upgrade para Pro';
+    if (nextPlan === 'premium') return 'Upgrade para Premium';
+    return null;
+  };
+
   const getAccessModeLabel = (accessMode: string | null) => {
     if (accessMode === 'manual') return 'Plano Manual';
     if (accessMode === 'paid') return 'Plano Pago';
@@ -194,7 +219,7 @@ export default function MySubscription() {
     return 'bg-gray-100 text-gray-800 border-gray-200';
   };
 
-  const handleRenewSubscription = async () => {
+  const startCheckout = async (selectedPlan: CheckoutPlan) => {
     try {
       if (!user || processingCheckout) return;
 
@@ -220,8 +245,6 @@ export default function MySubscription() {
         alert('Sessão expirada. Faça login novamente.');
         return;
       }
-
-      const selectedPlan = (store.plan || store.plan_name || 'starter').toLowerCase();
 
       logger.log('[MySubscription] Iniciando checkout', {
         storeId: store.id,
@@ -261,11 +284,26 @@ export default function MySubscription() {
 
       alert('Não foi possível gerar o link de pagamento.');
     } catch (err: any) {
-      console.error('Erro ao renovar assinatura:', err);
+      console.error('Erro ao iniciar checkout:', err);
       alert('Erro inesperado. Tente novamente.');
     } finally {
       setProcessingCheckout(false);
     }
+  };
+
+  const handleRenewSubscription = async () => {
+    const currentPlan = normalizePlan(store?.plan || store?.plan_name || 'starter');
+    await startCheckout(currentPlan);
+  };
+
+  const handleUpgradeSubscription = async () => {
+    const nextPlan = getNextPlan(store?.plan || store?.plan_name);
+    if (!nextPlan) {
+      alert('Sua loja já está no plano mais alto.');
+      return;
+    }
+
+    await startCheckout(nextPlan);
   };
 
   if (loading) {
@@ -297,6 +335,8 @@ export default function MySubscription() {
 
   const daysRemaining = getDaysRemaining();
   const limits = getPlanLimits(store.plan || 'starter');
+  const upgradeLabel = getUpgradeLabel(store.plan || store.plan_name);
+  const hasUpgrade = !!getNextPlan(store.plan || store.plan_name);
 
   return (
     <div className="w-full max-w-full space-y-6 pb-4">
@@ -496,7 +536,7 @@ export default function MySubscription() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 sm:flex-row">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
         <button
           onClick={() => navigate('/app/dashboard')}
           className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gray-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-gray-700"
@@ -509,6 +549,41 @@ export default function MySubscription() {
           <MessageCircle className="h-5 w-5" />
           Falar no WhatsApp
         </button>
+
+        {hasUpgrade && (
+          <button
+            onClick={handleUpgradeSubscription}
+            disabled={processingCheckout}
+            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {processingCheckout ? (
+              <>
+                <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24">
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                    fill="none"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
+                </svg>
+                Processando...
+              </>
+            ) : (
+              <>
+                <TrendingUp className="h-5 w-5" />
+                {upgradeLabel}
+              </>
+            )}
+          </button>
+        )}
 
         <button
           onClick={handleRenewSubscription}

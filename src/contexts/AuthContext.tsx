@@ -32,7 +32,15 @@ interface AuthContextType {
   isManager: boolean;
   isStaff: boolean;
   signIn: (email: string, password: string, captchaToken?: string) => Promise<{ success: boolean; error?: string }>;
-  signUp: (email: string, password: string, fullName: string, storeName: string, phone: string, city: string, captchaToken?: string) => Promise<{ error: Error | null }>;
+  signUp: (
+    email: string,
+    password: string,
+    fullName: string,
+    storeName: string,
+    phone: string,
+    city: string,
+    captchaToken?: string
+  ) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   startSupportMode: (targetStoreId: string) => Promise<void>;
@@ -56,6 +64,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isSupportMode, setIsSupportMode] = useState(false);
   const [userRole, setUserRole] = useState<UserRole>(null);
   const [storeId, setStoreId] = useState<string | null>(null);
+
+  const resetAuthDerivedState = () => {
+    setProfile(null);
+    setStore(null);
+    setHasValidStore(false);
+    setIsSubscriptionBlocked(false);
+    setIsSystemAdmin(false);
+    setIsSuperAdmin(false);
+    setUserRole(null);
+    setStoreId(null);
+    setSupportSession(null);
+    setIsSupportMode(false);
+  };
 
   const checkSubscriptionStatus = (store: Store): boolean => {
     logger.log('Verificando status da assinatura...');
@@ -117,11 +138,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const result = await Promise.race([
         queryFn(),
-        new Promise<{ data: null; error: any; timedOut: true }>((_, reject) =>
+        new Promise<never>((_, reject) =>
           setTimeout(() => {
             reject(new Error(`Query timeout: ${queryName}`));
           }, timeoutMs)
-        )
+        ),
       ]);
 
       const durationMs = Date.now() - startTime;
@@ -135,7 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         data: result.data,
         error: result.error,
         durationMs,
-        timedOut: false
+        timedOut: false,
       };
     } catch (error) {
       const durationMs = Date.now() - startTime;
@@ -143,9 +164,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       return {
         data: null,
-        error: error,
+        error,
         durationMs,
-        timedOut: true
+        timedOut: true,
       };
     }
   };
@@ -156,7 +177,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email: data.email,
       store_id: data.store_id,
       role: data.role,
-      is_system_admin: data.is_system_admin
+      is_system_admin: data.is_system_admin,
     });
 
     setProfile(data);
@@ -189,15 +210,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     diagnosticResults.admin_support_sessions = {
       duration: supportSessionResult.durationMs,
       status: supportSessionResult.error ? 'error' : 'success',
-      timedOut: supportSessionResult.timedOut
+      timedOut: supportSessionResult.timedOut,
     };
 
     if (supportSessionResult.error && !supportSessionResult.timedOut) {
-      logger.log('⚠️ [fetchProfile] Support session query error (ignored):', supportSessionResult.error.message);
+      logger.log(
+        '⚠️ [fetchProfile] Support session query error (ignored):',
+        supportSessionResult.error.message
+      );
     }
 
     if (supportSessionResult.timedOut) {
-      logger.log('⚠️ [fetchProfile] Support session query timed out (continuing without support mode)');
+      logger.log(
+        '⚠️ [fetchProfile] Support session query timed out (continuing without support mode)'
+      );
     }
 
     const activeSupportSession = supportSessionResult.data;
@@ -222,11 +248,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       diagnosticResults.stores_target_support = {
         duration: targetStoreResult.durationMs,
         status: targetStoreResult.error ? 'error' : 'success',
-        timedOut: targetStoreResult.timedOut
+        timedOut: targetStoreResult.timedOut,
       };
 
       if (targetStoreResult.error && !targetStoreResult.timedOut) {
-        logger.log('⚠️ [fetchProfile] Target store query error (ignored):', targetStoreResult.error.message);
+        logger.log(
+          '⚠️ [fetchProfile] Target store query error (ignored):',
+          targetStoreResult.error.message
+        );
       }
 
       if (targetStoreResult.timedOut) {
@@ -263,7 +292,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       diagnosticResults.stores_user_store = {
         duration: storeDataResult.durationMs,
         status: storeDataResult.error ? 'error' : 'success',
-        timedOut: storeDataResult.timedOut
+        timedOut: storeDataResult.timedOut,
       };
 
       if (storeDataResult.error && !storeDataResult.timedOut) {
@@ -334,11 +363,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         diagnosticResults.store_users_fetch_role = {
           duration: storeUserRoleResult.durationMs,
           status: storeUserRoleResult.error ? 'error' : 'success',
-          timedOut: storeUserRoleResult.timedOut
+          timedOut: storeUserRoleResult.timedOut,
         };
 
         if (storeUserRoleResult.error && !storeUserRoleResult.timedOut) {
-          logger.log('⚠️ [fetchProfile] Role query failed (proceeding with null role):', storeUserRoleResult.error.message);
+          logger.log(
+            '⚠️ [fetchProfile] Role query failed (proceeding with null role):',
+            storeUserRoleResult.error.message
+          );
           setUserRole(null);
         } else if (storeUserRoleResult.timedOut) {
           logger.log('⚠️ [fetchProfile] Role query timed out (continuing with null role)');
@@ -366,7 +398,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchProfile = async (userId: string, attemptNumber: number = 1): Promise<Profile | null> => {
     const maxAttempts = 3;
-    logger.log(`🔍 [fetchProfile] Starting profile fetch for user: ${userId} (attempt ${attemptNumber}/${maxAttempts})`);
+    logger.log(
+      `🔍 [fetchProfile] Starting profile fetch for user: ${userId} (attempt ${attemptNumber}/${maxAttempts})`
+    );
     console.log(`[Auth] fetchProfile START for userId: ${userId} (attempt ${attemptNumber}/${maxAttempts})`);
 
     try {
@@ -387,11 +421,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (
           attemptNumber < maxAttempts &&
-          (
-            profileError.message?.includes('timeout') ||
+          (profileError.message?.includes('timeout') ||
             profileError.message?.includes('network') ||
-            profileError.message?.includes('fetch')
-          )
+            profileError.message?.includes('fetch'))
         ) {
           const delayMs = attemptNumber * 1000;
           logger.log(`⏳ [fetchProfile] Retrying in ${delayMs}ms...`);
@@ -405,13 +437,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           logger.log('🔧 [fetchProfile] Profile not found, creating automatically...');
           console.log('[Auth] Creating missing profile for user:', userId);
 
-          const { error: insertError } = await supabase
-            .from('profiles')
-            .insert({
-              id: userId,
-              email: (await supabase.auth.getUser()).data.user?.email || '',
-              role: 'user',
-            });
+          const authUser = await supabase.auth.getUser();
+
+          const { error: insertError } = await supabase.from('profiles').insert({
+            id: userId,
+            email: authUser.data.user?.email || '',
+            role: 'user',
+          });
 
           if (insertError) {
             logger.error('❌ [fetchProfile] Failed to auto-create profile:', insertError);
@@ -434,14 +466,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        setProfile(null);
-        setStore(null);
-        setHasValidStore(false);
-        setIsSubscriptionBlocked(false);
-        setIsSystemAdmin(false);
-        setIsSuperAdmin(false);
-        setUserRole(null);
-        setStoreId(null);
+        resetAuthDerivedState();
         console.log('[Auth] Profile set to null due to error');
         return null;
       }
@@ -451,20 +476,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (data) {
         return await continueProfileSetup(data, userId);
-      } else {
-        logger.log('⚠️ [fetchProfile] No profile found in database');
-        console.log('[Auth] No profile found, setting all to null');
-        setProfile(null);
-        setStore(null);
-        setHasValidStore(false);
-        setIsSubscriptionBlocked(false);
-        setIsSystemAdmin(false);
-        setIsSuperAdmin(false);
-        setUserRole(null);
-        setStoreId(null);
-        console.log('[Auth] fetchProfile COMPLETE - no profile');
-        return null;
       }
+
+      logger.log('⚠️ [fetchProfile] No profile found in database');
+      console.log('[Auth] No profile found, setting all to null');
+      resetAuthDerivedState();
+      console.log('[Auth] fetchProfile COMPLETE - no profile');
+      return null;
     } catch (error) {
       logger.error(`❌ [fetchProfile] Fatal error (attempt ${attemptNumber}):`, error);
       console.error('[Auth] fetchProfile FATAL ERROR:', error);
@@ -478,21 +496,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return fetchProfile(userId, attemptNumber + 1);
       }
 
-      setProfile(null);
-      setStore(null);
-      setHasValidStore(false);
-      setIsSubscriptionBlocked(false);
-      setIsSystemAdmin(false);
-      setIsSuperAdmin(false);
-      setUserRole(null);
-      setStoreId(null);
-
+      resetAuthDerivedState();
       console.log('[Auth] fetchProfile COMPLETE - error handled');
       return null;
     }
   };
 
-  const fetchProfileWithTimeout = async (userId: string, timeoutMs: number = 8000): Promise<Profile | null> => {
+  const fetchProfileWithTimeout = async (
+    userId: string,
+    timeoutMs: number = 8000
+  ): Promise<Profile | null> => {
     logger.log(`⏱️ [fetchProfileWithTimeout] Starting with ${timeoutMs}ms timeout`);
     console.log(`[Auth] fetchProfileWithTimeout: ${timeoutMs}ms timeout for user ${userId}`);
 
@@ -504,20 +517,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           console.error(`[Auth] fetchProfile TIMEOUT after ${timeoutMs}ms`);
           reject(new Error('fetchProfile timeout'));
         }, timeoutMs)
-      )
+      ),
     ]).catch(async (error) => {
       logger.error('❌ [fetchProfileWithTimeout] Error or timeout:', error.message);
       console.error('[Auth] fetchProfileWithTimeout caught error:', error.message);
 
-      setProfile(null);
-      setStore(null);
-      setHasValidStore(false);
-      setIsSubscriptionBlocked(false);
-      setIsSystemAdmin(false);
-      setIsSuperAdmin(false);
-      setUserRole(null);
-      setStoreId(null);
-
+      resetAuthDerivedState();
       return null;
     });
   };
@@ -544,7 +549,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }, 10000);
 
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
 
         if (!mounted) {
           logger.log('⚠️ [initializeAuth] Component unmounted, aborting');
@@ -564,16 +571,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } catch (error) {
         logger.error('❌ [initializeAuth] Fatal error:', error);
-
         if (mounted) {
-          setProfile(null);
-          setStore(null);
-          setHasValidStore(false);
-          setIsSubscriptionBlocked(false);
-          setIsSystemAdmin(false);
-          setIsSuperAdmin(false);
-          setUserRole(null);
-          setStoreId(null);
+          resetAuthDerivedState();
         }
       } finally {
         clearTimeout(failSafeTimeout);
@@ -586,7 +585,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     initializeAuth();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) {
         logger.log('⚠️ [onAuthStateChange] Component unmounted, ignoring event:', event);
         return;
@@ -598,16 +599,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logger.log('👋 [onAuthStateChange] User signed out, clearing state');
         setSession(null);
         setUser(null);
-        setProfile(null);
-        setStore(null);
-        setHasValidStore(false);
-        setIsSubscriptionBlocked(false);
-        setIsSystemAdmin(false);
-        setIsSuperAdmin(false);
-        setUserRole(null);
-        setStoreId(null);
-        setSupportSession(null);
-        setIsSupportMode(false);
+        resetAuthDerivedState();
         setLoading(false);
         return;
       }
@@ -650,7 +642,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   email: profileResult.email,
                   role: profileResult.role,
                   store_id: profileResult.store_id,
-                  is_system_admin: profileResult.is_system_admin
+                  is_system_admin: profileResult.is_system_admin,
                 });
               }
             } else {
@@ -659,15 +651,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           } catch (error) {
             logger.error('❌ [onAuthStateChange] Error handling auth change:', error);
             console.error('[Auth] Error in onAuthStateChange:', error);
-
-            setProfile(null);
-            setStore(null);
-            setHasValidStore(false);
-            setIsSubscriptionBlocked(false);
-            setIsSystemAdmin(false);
-            setIsSuperAdmin(false);
-            setUserRole(null);
-            setStoreId(null);
+            resetAuthDerivedState();
           } finally {
             fetchProfileInProgress = false;
             logger.log('✅ [onAuthStateChange] Setting loading=false');
@@ -685,7 +669,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const signIn = async (email: string, password: string, captchaToken?: string): Promise<{ success: boolean; error?: string }> => {
+  const signIn = async (
+    email: string,
+    password: string,
+    captchaToken?: string
+  ): Promise<{ success: boolean; error?: string }> => {
     logger.log('🔐 [signIn] Attempting login for:', email);
 
     try {
@@ -699,7 +687,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+                Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
               },
               body: JSON.stringify({ token: captchaToken }),
             }
@@ -742,7 +730,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
-        options: captchaToken ? { captchaToken } : undefined
+        options: captchaToken ? { captchaToken } : undefined,
       });
 
       if (error) {
@@ -768,7 +756,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           };
         }
 
-        if (error.message.toLowerCase().includes('fetch') || error.message.toLowerCase().includes('network')) {
+        if (
+          error.message.toLowerCase().includes('fetch') ||
+          error.message.toLowerCase().includes('network')
+        ) {
           return {
             success: false,
             error: 'Erro de conexão. Verifique sua internet e tente novamente.',
@@ -799,7 +790,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       return { success: true };
-
     } catch (err) {
       logger.error('❌ [signIn] Unexpected error:', err);
 
@@ -823,11 +813,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const signUp = async (email: string, password: string, fullName: string, storeName: string, phone: string, city: string, captchaToken?: string) => {
+  const signUp = async (
+    email: string,
+    password: string,
+    fullName: string,
+    storeName: string,
+    phone: string,
+    city: string,
+    captchaToken?: string
+  ) => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: captchaToken ? { captchaToken } : undefined
+      options: captchaToken ? { captchaToken } : undefined,
     });
 
     if (data.user && !error) {
@@ -844,15 +842,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .select()
           .single();
 
-        if (storeError) throw storeError;
+        if (storeError || !store) throw storeError || new Error('Falha ao criar loja');
 
-        await supabase.from('profiles').insert({
+        const { error: profileInsertError } = await supabase.from('profiles').insert({
           id: data.user.id,
           email,
           full_name: fullName,
           store_id: store.id,
           role: 'owner',
         });
+
+        if (profileInsertError) throw profileInsertError;
+
+        const { error: storeUserInsertError } = await supabase.from('store_users').insert({
+          store_id: store.id,
+          user_id: data.user.id,
+          role: 'owner',
+          is_active: true,
+        });
+
+        if (storeUserInsertError) throw storeUserInsertError;
 
         await logAuditEvent({
           userId: data.user.id,
@@ -864,7 +873,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await logAuditEvent({
           eventType: 'signup_failed',
           eventStatus: 'failure',
-          metadata: { email, errorMessage: 'Failed to create store or profile' },
+          metadata: { email, errorMessage: 'Failed to create store, profile or store user' },
         });
         return { error: err as Error };
       }
@@ -1095,16 +1104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logger.log('🧹 [signOut] Limpando todos os estados...');
       setSession(null);
       setUser(null);
-      setProfile(null);
-      setStore(null);
-      setHasValidStore(false);
-      setIsSubscriptionBlocked(false);
-      setIsSystemAdmin(false);
-      setIsSuperAdmin(false);
-      setUserRole(null);
-      setStoreId(null);
-      setSupportSession(null);
-      setIsSupportMode(false);
+      resetAuthDerivedState();
       setLoading(false);
 
       if (currentUser) {
@@ -1123,16 +1123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setSession(null);
       setUser(null);
-      setProfile(null);
-      setStore(null);
-      setHasValidStore(false);
-      setIsSubscriptionBlocked(false);
-      setIsSystemAdmin(false);
-      setIsSuperAdmin(false);
-      setUserRole(null);
-      setStoreId(null);
-      setSupportSession(null);
-      setIsSupportMode(false);
+      resetAuthDerivedState();
       setLoading(false);
 
       window.location.href = '/login';
@@ -1141,42 +1132,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const effectivePlan = getEffectivePlan(store, isSuperAdmin, isSupportMode);
 
-  const effectiveUserRole: UserRole = (isSupportMode && supportSession && storeId)
-    ? 'owner'
-    : userRole;
+  const effectiveUserRole: UserRole =
+    isSupportMode && supportSession && storeId ? 'owner' : userRole;
 
   const isOwner = effectiveUserRole === 'owner';
   const isManager = effectiveUserRole === 'manager';
   const isStaff = effectiveUserRole === 'staff';
 
   return (
-    <AuthContext.Provider value={{
-      user,
-      profile,
-      store,
-      session,
-      loading,
-      hasValidStore,
-      isSubscriptionBlocked,
-      isSystemAdmin,
-      isSuperAdmin,
-      supportSession,
-      isSupportMode,
-      userRole,
-      effectiveUserRole,
-      storeId,
-      effectivePlan,
-      isOwner,
-      isManager,
-      isStaff,
-      signIn,
-      signUp,
-      signOut,
-      refreshProfile,
-      startSupportMode,
-      endSupportMode,
-      switchSupportStore
-    }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        profile,
+        store,
+        session,
+        loading,
+        hasValidStore,
+        isSubscriptionBlocked,
+        isSystemAdmin,
+        isSuperAdmin,
+        supportSession,
+        isSupportMode,
+        userRole,
+        effectiveUserRole,
+        storeId,
+        effectivePlan,
+        isOwner,
+        isManager,
+        isStaff,
+        signIn,
+        signUp,
+        signOut,
+        refreshProfile,
+        startSupportMode,
+        endSupportMode,
+        switchSupportStore,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

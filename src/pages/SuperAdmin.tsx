@@ -16,6 +16,7 @@ import {
   ArrowRight,
   Gift,
   RefreshCcw,
+  RotateCcw,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../lib/formatters';
@@ -31,6 +32,7 @@ interface StoreData {
   plan_name: string | null;
   created_at: string;
   subscription_ends_at?: string | null;
+  cancel_at_period_end?: boolean;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
   is_blocked: boolean;
@@ -92,6 +94,7 @@ export default function SuperAdmin() {
   const [accessingStore, setAccessingStore] = useState<string | null>(null);
   const [syncingStore, setSyncingStore] = useState<string | null>(null);
   const [cancellingStore, setCancellingStore] = useState<string | null>(null);
+  const [reactivatingStore, setReactivatingStore] = useState<string | null>(null);
   const [selectedStoreId, setSelectedStoreId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -229,8 +232,17 @@ export default function SuperAdmin() {
     if (!isPaidStore(store)) return false;
     if (!hasStripeSubscription(store)) return false;
     if (store.is_blocked) return false;
+    if (store.cancel_at_period_end) return false;
 
     return ['active', 'trial', 'past_due'].includes(store.subscription_status);
+  };
+
+  const canReactivateStripe = (store: StoreData) => {
+    if (!isPaidStore(store)) return false;
+    if (!hasStripeSubscription(store)) return false;
+    if (store.is_blocked) return false;
+
+    return Boolean(store.cancel_at_period_end);
   };
 
   const handleAccessStore = async (storeId: string) => {
@@ -294,6 +306,35 @@ export default function SuperAdmin() {
       alert('Erro inesperado ao cancelar assinatura.');
     } finally {
       setCancellingStore(null);
+    }
+  };
+
+  const handleReactivateSubscription = async (storeId: string) => {
+    const confirmed = window.confirm(
+      'Deseja reativar esta assinatura e remover o cancelamento agendado?'
+    );
+    if (!confirmed) return;
+
+    try {
+      setReactivatingStore(storeId);
+
+      const { error } = await supabase.functions.invoke('admin-reactivate-subscription', {
+        body: { storeId },
+      });
+
+      if (error) {
+        console.error('Erro ao reativar assinatura:', error);
+        alert('Erro ao reativar assinatura.');
+        return;
+      }
+
+      alert('Assinatura reativada com sucesso.');
+      await loadDashboardData();
+    } catch (err) {
+      console.error('Erro inesperado ao reativar assinatura:', err);
+      alert('Erro inesperado ao reativar assinatura.');
+    } finally {
+      setReactivatingStore(null);
     }
   };
 
@@ -536,14 +577,22 @@ export default function SuperAdmin() {
                     </td>
 
                     <td className="px-6 py-4">
-                      <span
-                        className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${getStatusBadge(
-                          store.subscription_status,
-                          store.is_blocked
-                        )}`}
-                      >
-                        {getStatusText(store.subscription_status, store.is_blocked)}
-                      </span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${getStatusBadge(
+                            store.subscription_status,
+                            store.is_blocked
+                          )}`}
+                        >
+                          {getStatusText(store.subscription_status, store.is_blocked)}
+                        </span>
+
+                        {store.cancel_at_period_end && (
+                          <span className="inline-flex rounded-full border border-amber-200 bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">
+                            Cancelamento agendado
+                          </span>
+                        )}
+                      </div>
                     </td>
 
                     <td className="px-6 py-4">
@@ -679,6 +728,27 @@ export default function SuperAdmin() {
                           </button>
                         )}
 
+                        {canReactivateStripe(store) && (
+                          <button
+                            onClick={() => handleReactivateSubscription(store.id)}
+                            disabled={reactivatingStore === store.id}
+                            className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                            title="Reativar assinatura"
+                          >
+                            {reactivatingStore === store.id ? (
+                              <>
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                <span>Reativando...</span>
+                              </>
+                            ) : (
+                              <>
+                                <RotateCcw className="h-4 w-4" />
+                                <span>Reativar</span>
+                              </>
+                            )}
+                          </button>
+                        )}
+
                         <button
                           onClick={() => setSelectedStoreId(store.id)}
                           className="inline-flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-medium text-blue-600 transition hover:bg-blue-50 hover:text-blue-800"
@@ -731,6 +801,12 @@ export default function SuperAdmin() {
                     >
                       {getStatusText(store.subscription_status, store.is_blocked)}
                     </span>
+
+                    {store.cancel_at_period_end && (
+                      <span className="inline-flex rounded-full border border-amber-200 bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">
+                        Cancelamento agendado
+                      </span>
+                    )}
 
                     <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-800">
                       {getPlanLabel(store.plan, store.plan_name)}
@@ -861,6 +937,26 @@ export default function SuperAdmin() {
                         )}
                       </button>
                     )}
+
+                    {canReactivateStripe(store) && (
+                      <button
+                        onClick={() => handleReactivateSubscription(store.id)}
+                        disabled={reactivatingStore === store.id}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {reactivatingStore === store.id ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span>Reativando...</span>
+                          </>
+                        ) : (
+                          <>
+                            <RotateCcw className="h-4 w-4" />
+                            <span>Reativar</span>
+                          </>
+                        )}
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -920,8 +1016,8 @@ export default function SuperAdmin() {
               </div>
               <p className="ml-5 text-sm text-gray-600">
                 Integração administrativa com Stripe parcialmente implementada:
-                sincronização e cancelamento já funcionam. Ainda faltam histórico de
-                pagamentos, reembolsos, reativação e gestão avançada.
+                sincronização, cancelamento e reativação já funcionam. Ainda faltam
+                histórico de pagamentos, reembolsos e gestão avançada.
               </p>
             </div>
           </div>

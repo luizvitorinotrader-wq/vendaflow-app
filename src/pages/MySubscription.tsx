@@ -31,30 +31,52 @@ export default function MySubscription() {
 
   useEffect(() => {
     fetchStoreData();
-  }, []);
+  }, [user]);
 
   const fetchStoreData = async () => {
-    if (!user) return;
-
-    setLoading(true);
-
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('store_id')
-      .eq('id', user.id)
-      .maybeSingle();
-
-    if (profile?.store_id) {
-      const { data: storeData } = await supabase
-        .from('stores')
-        .select('*')
-        .eq('id', profile.store_id)
-        .maybeSingle();
-
-      setStore(storeData);
+    if (!user) {
+      setLoading(false);
+      return;
     }
 
-    setLoading(false);
+    try {
+      setLoading(true);
+
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('store_id')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (profileError) {
+        console.error('Erro ao buscar perfil:', profileError);
+        setStore(null);
+        return;
+      }
+
+      if (profile?.store_id) {
+        const { data: storeData, error: storeError } = await supabase
+          .from('stores')
+          .select('*')
+          .eq('id', profile.store_id)
+          .maybeSingle();
+
+        if (storeError) {
+          console.error('Erro ao buscar loja:', storeError);
+          setStore(null);
+          return;
+        }
+
+        setStore(storeData);
+      } else {
+        setStore(null);
+      }
+    } catch (err) {
+      console.error('Erro inesperado ao carregar assinatura:', err);
+      setStore(null);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getStatusTranslation = (status: string | null) => {
@@ -150,6 +172,7 @@ export default function MySubscription() {
     const planNames: Record<string, string> = {
       starter: 'Starter',
       pro: 'Pro',
+      professional: 'Pro',
       premium: 'Premium',
     };
     return planNames[plan?.toLowerCase() || ''] || plan || 'Starter';
@@ -184,20 +207,36 @@ export default function MySubscription() {
 
       const {
         data: { session },
+        error: sessionError,
       } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        console.error('Erro ao obter sessão:', sessionError);
+        alert('Erro ao validar a sessão. Faça login novamente.');
+        return;
+      }
 
       if (!session?.access_token) {
         alert('Sessão expirada. Faça login novamente.');
         return;
       }
 
+      const selectedPlan = (store.plan || store.plan_name || 'starter').toLowerCase();
+
+      logger.log('[MySubscription] Iniciando checkout', {
+        storeId: store.id,
+        selectedPlan,
+        hasToken: !!session.access_token,
+      });
+
       const { data, error } = await supabase.functions.invoke('create-checkout-session-v2', {
         body: {
           storeId: store.id,
-          plan: store.plan || store.plan_name || 'starter',
+          plan: selectedPlan,
         },
         headers: {
           Authorization: `Bearer ${session.access_token}`,
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
         },
       });
 
@@ -207,11 +246,20 @@ export default function MySubscription() {
         return;
       }
 
-      if (data?.url) {
+      logger.log('[MySubscription] Resposta checkout', data);
+
+      if (data?.url && typeof data.url === 'string') {
         window.location.href = data.url;
-      } else {
-        alert('Não foi possível gerar o link de pagamento.');
+        return;
       }
+
+      if (data?.error) {
+        console.error('Erro retornado pela function:', data.error);
+        alert(typeof data.error === 'string' ? data.error : 'Não foi possível gerar o link de pagamento.');
+        return;
+      }
+
+      alert('Não foi possível gerar o link de pagamento.');
     } catch (err: any) {
       console.error('Erro ao renovar assinatura:', err);
       alert('Erro inesperado. Tente novamente.');
@@ -286,9 +334,7 @@ export default function MySubscription() {
         </div>
       )}
 
-      <div
-        className={`rounded-2xl border px-6 py-4 shadow-sm ${getStatusMessageColor()}`}
-      >
+      <div className={`rounded-2xl border px-6 py-4 shadow-sm ${getStatusMessageColor()}`}>
         <div className="flex items-center gap-3">
           {(store.subscription_status === 'active' || store.subscription_status === 'trial') &&
           !store.is_blocked ? (

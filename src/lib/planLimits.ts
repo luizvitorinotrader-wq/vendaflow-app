@@ -1,4 +1,4 @@
-type PlanName = 'starter' | 'pro' | 'premium';
+type PlanName = 'starter' | 'professional' | 'premium';
 
 export interface PlanLimits {
   maxTables: number;
@@ -14,7 +14,7 @@ export const PLAN_LIMITS: Record<PlanName, PlanLimits> = {
     maxUsers: 3,
     maxOwners: 1,
   },
-  pro: {
+  professional: {
     maxTables: 10,
     hasTablesFeature: true,
     maxUsers: 10,
@@ -28,9 +28,17 @@ export const PLAN_LIMITS: Record<PlanName, PlanLimits> = {
   },
 };
 
+export function normalizePlanName(planName?: string | null): PlanName {
+  const normalized = (planName || '').trim().toLowerCase();
+
+  if (normalized === 'premium') return 'premium';
+  if (normalized === 'pro' || normalized === 'professional') return 'professional';
+  return 'starter';
+}
+
 export function getPlanLimits(planName: string): PlanLimits {
-  const normalizedPlan = (planName?.toLowerCase() || 'starter') as PlanName;
-  return PLAN_LIMITS[normalizedPlan] || PLAN_LIMITS.starter;
+  const normalizedPlan = normalizePlanName(planName);
+  return PLAN_LIMITS[normalizedPlan];
 }
 
 export function canCreateTable(currentCount: number, planName: string): boolean {
@@ -40,12 +48,20 @@ export function canCreateTable(currentCount: number, planName: string): boolean 
 
 export function getTableLimitMessage(planName: string): string {
   const limits = getPlanLimits(planName);
+  const normalizedPlan = normalizePlanName(planName);
 
   if (!limits.hasTablesFeature) {
     return 'O recurso de mesas/comandas está disponível nos planos Pro e Premium.';
   }
 
-  return `Seu plano ${planName} permite até ${limits.maxTables} mesas.`;
+  const planLabel =
+    normalizedPlan === 'professional'
+      ? 'Pro'
+      : normalizedPlan === 'premium'
+      ? 'Premium'
+      : 'Starter';
+
+  return `Seu plano ${planLabel} permite até ${limits.maxTables} mesas.`;
 }
 
 export function canCreateUser(currentActiveCount: number, planName: string): boolean {

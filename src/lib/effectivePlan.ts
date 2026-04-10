@@ -1,40 +1,23 @@
-type PlanName = 'starter' | 'pro' | 'premium';
+import type { Database } from './database.types';
+import { normalizePlanName } from './planLimits';
 
-interface Store {
-  plan?: string | null;
-  plan_name?: string | null;
-}
+type Store = Database['public']['Tables']['stores']['Row'];
+type EffectivePlan = 'starter' | 'professional' | 'premium';
 
 export function getEffectivePlan(
   store: Store | null,
   isSuperAdmin: boolean,
   isSupportMode: boolean
-): 'starter' | 'pro' | 'premium' {
-
-  // 🔥 REGRA CRÍTICA: Support mode tem acesso total
-  if (isSuperAdmin && isSupportMode) {
+): EffectivePlan {
+  // Super admin fora do support mode pode operar com visão máxima
+  if (isSuperAdmin && !isSupportMode) {
     return 'premium';
   }
 
-  const realPlan = (store?.plan || 'starter').toLowerCase();
-
-  if (realPlan === 'pro' || realPlan === 'premium') {
-    return realPlan as 'pro' | 'premium';
+  // Em support mode, respeita o plano real da loja suportada
+  if (store) {
+    return normalizePlanName(store.plan);
   }
 
   return 'starter';
-}
-
-export function getEffectivePlanDisplay(
-  store: Store | null,
-  isSuperAdmin: boolean,
-  isSupportMode: boolean
-): string {
-  const effectivePlan = getEffectivePlan(store, isSuperAdmin, isSupportMode);
-
-  if (isSuperAdmin && isSupportMode && effectivePlan !== (store?.plan_name || store?.plan || 'starter').toLowerCase()) {
-    return `${effectivePlan} (Support Mode Override)`;
-  }
-
-  return effectivePlan;
 }

@@ -9,7 +9,6 @@ export default function SetupStore() {
   const [storeName, setStoreName] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
-  const [plan, setPlan] = useState<'starter' | 'professional' | 'premium'>('starter');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
@@ -66,7 +65,11 @@ export default function SetupStore() {
     setError('');
     setLoading(true);
 
-    if (!user) return;
+    if (!user) {
+      setError('Usuário não autenticado.');
+      setLoading(false);
+      return;
+    }
 
     try {
       logger.log('Verificando se o usuário já possui uma loja...');
@@ -89,36 +92,50 @@ export default function SetupStore() {
         if (existingStore) {
           logger.log('Loja existente encontrada, redirecionando...');
           await refreshProfile();
-          navigate('/app');
+          navigate('/app/dashboard', { replace: true });
           return;
         }
       }
 
-      logger.log('Criando nova loja...');
+      const trialEndsAt = new Date(
+        Date.now() + 7 * 24 * 60 * 60 * 1000
+      ).toISOString();
+
+      logger.log('Criando nova loja em Starter Trial...');
+
       const { data: store, error: storeError } = await supabase
         .from('stores')
         .insert({
-          name: storeName,
+          name: storeName.trim(),
           owner_id: user.id,
-          phone,
-          address,
-          plan,
+          phone: phone.trim() || null,
+          address: address.trim() || null,
+          plan: 'starter',
+          plan_name: 'Starter',
+          subscription_status: 'trial',
+          trial_ends_at: trialEndsAt,
+          subscription_ends_at: null,
+          access_mode: null,
+          is_blocked: false,
+          cancel_at_period_end: false,
         })
         .select()
         .single();
 
       if (storeError) throw storeError;
 
-      logger.log('Loja criada:', store);
+      logger.log('Loja criada com Starter Trial:', store);
       logger.log('Atualizando perfil com store_id...');
 
-      await supabase
+      const { error: profileUpdateError } = await supabase
         .from('profiles')
         .update({ store_id: store.id })
         .eq('id', user.id);
 
+      if (profileUpdateError) throw profileUpdateError;
+
       await refreshProfile();
-      navigate('/app');
+      navigate('/app/dashboard', { replace: true });
     } catch (err) {
       logger.error('Erro ao criar loja:', err);
       setError('Erro ao criar loja. Tente novamente.');
@@ -148,8 +165,16 @@ export default function SetupStore() {
             Configure sua Loja
           </h1>
           <p className="text-center text-gray-600 mb-8">
-            Vamos começar com as informações básicas da sua negócio
+            Vamos começar com as informações básicas do seu negócio.
           </p>
+
+          <div className="mb-6 rounded-xl border border-green-200 bg-green-50 p-4">
+            <h2 className="text-sm font-semibold text-green-800">Starter Trial automático</h2>
+            <p className="mt-1 text-sm text-green-700">
+              Sua loja será criada no plano Starter com 7 dias de teste grátis.
+              Depois, você poderá fazer upgrade dentro do app.
+            </p>
+          </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
@@ -208,36 +233,6 @@ export default function SetupStore() {
                   placeholder="Rua das Praias, 123"
                 />
               </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">
-                Escolha seu Plano
-              </label>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {[
-                  { value: 'starter', name: 'Starter', price: 'R$ 79,90/mês' },
-                  { value: 'professional', name: 'Pro', price: 'R$ 99,90/mês' },
-                  { value: 'premium', name: 'Premium', price: 'R$ 199,90/mês' },
-                ].map((p) => (
-                  <button
-                    key={p.value}
-                    type="button"
-                    onClick={() => setPlan(p.value as typeof plan)}
-                    className={`p-4 border-2 rounded-lg text-center transition ${
-                      plan === p.value
-                        ? 'border-primary bg-green-50'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className="font-semibold text-gray-900">{p.name}</div>
-                    <div className="text-sm text-gray-600 mt-1">{p.price}</div>
-                  </button>
-                ))}
-              </div>
-              <p className="mt-2 text-xs text-gray-500 text-center">
-                7 dias de teste grátis em todos os planos
-              </p>
             </div>
 
             <button

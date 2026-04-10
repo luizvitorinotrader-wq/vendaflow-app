@@ -23,13 +23,14 @@ import { getPlanLimits } from '../lib/planLimits';
 
 type Store = Database['public']['Tables']['stores']['Row'];
 type CheckoutPlan = 'starter' | 'pro' | 'premium';
+type ProcessingAction = 'renew' | 'upgrade' | null;
 
 export default function MySubscription() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [store, setStore] = useState<Store | null>(null);
   const [loading, setLoading] = useState(true);
-  const [processingAction, setProcessingAction] = useState<"renew" | "upgrade" | null>(null);
+  const [processingAction, setProcessingAction] = useState<ProcessingAction>(null);
 
   useEffect(() => {
     fetchStoreData();
@@ -220,9 +221,9 @@ export default function MySubscription() {
   };
 
   const startCheckout = async (
-  selectedPlan: CheckoutPlan,
-  action: "renew" | "upgrade"
-) => {
+    selectedPlan: CheckoutPlan,
+    action: Exclude<ProcessingAction, null>
+  ) => {
     try {
       if (!user || processingAction !== null) return;
 
@@ -252,6 +253,7 @@ export default function MySubscription() {
       logger.log('[MySubscription] Iniciando checkout', {
         storeId: store.id,
         selectedPlan,
+        action,
         hasToken: !!session.access_token,
       });
 
@@ -295,19 +297,19 @@ export default function MySubscription() {
   };
 
   const handleRenewSubscription = async () => {
-  const currentPlan = normalizePlan(store?.plan || store?.plan_name || 'starter');
-  await startCheckout(currentPlan, "renew");
-};
+    const currentPlan = normalizePlan(store?.plan || store?.plan_name || 'starter');
+    await startCheckout(currentPlan, 'renew');
+  };
 
   const handleUpgradeSubscription = async () => {
-  const nextPlan = getNextPlan(store?.plan || store?.plan_name);
-  if (!nextPlan) {
-    alert('Sua loja já está no plano mais alto.');
-    return;
-  }
+    const nextPlan = getNextPlan(store?.plan || store?.plan_name);
+    if (!nextPlan) {
+      alert('Sua loja já está no plano mais alto.');
+      return;
+    }
 
-  await startCheckout(nextPlan, "upgrade");
-};
+    await startCheckout(nextPlan, 'upgrade');
+  };
 
   if (loading) {
     return (
@@ -340,6 +342,7 @@ export default function MySubscription() {
   const limits = getPlanLimits(store.plan || 'starter');
   const upgradeLabel = getUpgradeLabel(store.plan || store.plan_name);
   const hasUpgrade = !!getNextPlan(store.plan || store.plan_name);
+  const isAnyProcessing = processingAction !== null;
 
   return (
     <div className="w-full max-w-full space-y-6 pb-4">
@@ -556,10 +559,10 @@ export default function MySubscription() {
         {hasUpgrade && (
           <button
             onClick={handleUpgradeSubscription}
-            disabled={processingCheckout}
+            disabled={isAnyProcessing}
             className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {processingCheckout ? (
+            {processingAction === 'upgrade' ? (
               <>
                 <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24">
                   <circle
@@ -590,10 +593,10 @@ export default function MySubscription() {
 
         <button
           onClick={handleRenewSubscription}
-          disabled={processingCheckout}
+          disabled={isAnyProcessing}
           className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {processingCheckout ? (
+          {processingAction === 'renew' ? (
             <>
               <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24">
                 <circle

@@ -27,7 +27,7 @@ interface AuthContextType {
   userRole: UserRole;
   effectiveUserRole: UserRole;
   storeId: string | null;
-  effectivePlan: 'starter' | 'pro' | 'premium';
+  effectivePlan: 'starter' | 'professional' | 'premium';
   isOwner: boolean;
   isManager: boolean;
   isStaff: boolean;

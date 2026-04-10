@@ -29,7 +29,7 @@ export default function MySubscription() {
   const navigate = useNavigate();
   const [store, setStore] = useState<Store | null>(null);
   const [loading, setLoading] = useState(true);
-  const [processingCheckout, setProcessingCheckout] = useState(false);
+  const [processingAction, setProcessingAction] = useState<"renew" | "upgrade" | null>(null);
 
   useEffect(() => {
     fetchStoreData();
@@ -219,16 +219,19 @@ export default function MySubscription() {
     return 'bg-gray-100 text-gray-800 border-gray-200';
   };
 
-  const startCheckout = async (selectedPlan: CheckoutPlan) => {
+  const startCheckout = async (
+  selectedPlan: CheckoutPlan,
+  action: "renew" | "upgrade"
+) => {
     try {
-      if (!user || processingCheckout) return;
+      if (!user || processingAction !== null) return;
 
       if (!store?.id) {
         alert('Erro: loja não identificada.');
         return;
       }
 
-      setProcessingCheckout(true);
+      setProcessingAction(action);
 
       const {
         data: { session },
@@ -287,24 +290,24 @@ export default function MySubscription() {
       console.error('Erro ao iniciar checkout:', err);
       alert('Erro inesperado. Tente novamente.');
     } finally {
-      setProcessingCheckout(false);
+      setProcessingAction(null);
     }
   };
 
   const handleRenewSubscription = async () => {
-    const currentPlan = normalizePlan(store?.plan || store?.plan_name || 'starter');
-    await startCheckout(currentPlan);
-  };
+  const currentPlan = normalizePlan(store?.plan || store?.plan_name || 'starter');
+  await startCheckout(currentPlan, "renew");
+};
 
   const handleUpgradeSubscription = async () => {
-    const nextPlan = getNextPlan(store?.plan || store?.plan_name);
-    if (!nextPlan) {
-      alert('Sua loja já está no plano mais alto.');
-      return;
-    }
+  const nextPlan = getNextPlan(store?.plan || store?.plan_name);
+  if (!nextPlan) {
+    alert('Sua loja já está no plano mais alto.');
+    return;
+  }
 
-    await startCheckout(nextPlan);
-  };
+  await startCheckout(nextPlan, "upgrade");
+};
 
   if (loading) {
     return (

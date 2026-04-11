@@ -45,6 +45,7 @@ export default function SetupStore() {
 
         if (profileError) {
           logger.error('Erro ao verificar perfil existente:', profileError);
+          if (isMounted) setChecking(false);
           return;
         }
 
@@ -59,6 +60,7 @@ export default function SetupStore() {
 
           if (storeError) {
             logger.error('Erro ao verificar loja existente:', storeError);
+            if (isMounted) setChecking(false);
             return;
           }
 
@@ -203,6 +205,7 @@ export default function SetupStore() {
 
       logger.log('Perfil atualizado com store_id com sucesso.');
 
+      // Pequena pausa para evitar corrida de leitura logo após a escrita
       await new Promise((resolve) => setTimeout(resolve, 400));
 
       try {

@@ -1,107 +1,162 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Store, MapPin, Phone } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { Store, MapPin, Phone } from 'lucide-react';
 import { logger } from '../lib/logger';
+
+type StorePlan = 'starter' | 'professional' | 'premium';
 
 export default function SetupStore() {
   const [storeName, setStoreName] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
+  const [plan, setPlan] = useState<StorePlan>('starter');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
+
   const { user, hasValidStore, refreshProfile } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
+    let isMounted = true;
+
     const checkExistingStore = async () => {
       if (!user) {
-        setChecking(false);
+        if (isMounted) setChecking(false);
         return;
       }
 
-      logger.log('Verificando se usuário já possui loja configurada...');
+      try {
+        logger.log('Verificando se usuário já possui loja configurada...');
 
-      if (hasValidStore) {
-        logger.log('Usuário já possui loja válida, redirecionando para dashboard...');
-        navigate('/app/dashboard', { replace: true });
-        return;
-      }
-
-      const { data: existingProfile } = await supabase
-        .from('profiles')
-        .select('store_id')
-        .eq('id', user.id)
-        .maybeSingle();
-
-      if (existingProfile?.store_id) {
-        logger.log('Store ID encontrado, verificando existência da loja...');
-
-        const { data: existingStore } = await supabase
-          .from('stores')
-          .select('*')
-          .eq('id', existingProfile.store_id)
-          .maybeSingle();
-
-        if (existingStore) {
-          logger.log('Loja existente encontrada, redirecionando para dashboard...');
-          await refreshProfile();
+        if (hasValidStore) {
+          logger.log('Usuário já possui loja válida, redirecionando para dashboard...');
           navigate('/app/dashboard', { replace: true });
           return;
         }
-      }
 
-      logger.log('Nenhuma loja encontrada, permitindo configuração...');
-      setChecking(false);
+        const { data: existingProfile, error: profileError } = await supabase
+          .from('profiles')
+          .select('store_id')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (profileError) {
+          logger.error('Erro ao verificar perfil existente:', profileError);
+          if (isMounted) setChecking(false);
+          return;
+        }
+
+        if (existingProfile?.store_id) {
+          logger.log('Store ID encontrado, verificando existência da loja...');
+
+          const { data: existingStore, error: storeError } = await supabase
+            .from('stores')
+            .select('id')
+            .eq('id', existingProfile.store_id)
+            .maybeSingle();
+
+          if (storeError) {
+            logger.error('Erro ao verificar loja existente:', storeError);
+            if (isMounted) setChecking(false);
+            return;
+          }
+
+          if (existingStore) {
+            logger.log('Loja existente encontrada, atualizando perfil e redirecionando...');
+
+            try {
+              await refreshProfile();
+            } catch (refreshError) {
+              logger.error('Falha ao atualizar perfil na checagem inicial:', refreshError);
+            }
+
+            navigate('/app/dashboard', { replace: true });
+            return;
+          }
+        }
+
+        logger.log('Nenhuma loja encontrada, permitindo configuração...');
+      } catch (err) {
+        logger.error('Erro inesperado ao verificar loja existente:', err);
+      } finally {
+        if (isMounted) setChecking(false);
+      }
     };
 
     checkExistingStore();
+
+    return () => {
+      isMounted = false;
+    };
   }, [user, hasValidStore, navigate, refreshProfile]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setLoading(true);
 
     if (!user) {
-      setError('Usuário não autenticado.');
+      setError('Usuário não autenticado. Faça login novamente.');
       setLoading(false);
       return;
     }
 
+    setError('');
+    setLoading(true);
+
     try {
       logger.log('Verificando se o usuário já possui uma loja...');
 
-      const { data: existingProfile } = await supabase
+      const { data: existingProfile, error: profileError } = await supabase
         .from('profiles')
         .select('store_id')
         .eq('id', user.id)
         .maybeSingle();
 
+      if (profileError) {
+        throw profileError;
+      }
+
       if (existingProfile?.store_id) {
         logger.log('Usuário já possui store_id:', existingProfile.store_id);
 
-        const { data: existingStore } = await supabase
+        const { data: existingStore, error: existingStoreError } = await supabase
           .from('stores')
-          .select('*')
+          .select('id')
           .eq('id', existingProfile.store_id)
           .maybeSingle();
 
+        if (existingStoreError) {
+          throw existingStoreError;
+        }
+
         if (existingStore) {
           logger.log('Loja existente encontrada, redirecionando...');
-          await refreshProfile();
+
+          try {
+            await refreshProfile();
+          } catch (refreshError) {
+            logger.error('Falha ao atualizar perfil antes do redirecionamento:', refreshError);
+          }
+
           navigate('/app/dashboard', { replace: true });
           return;
         }
       }
+
+      logger.log('Criando nova loja...');
 
       const trialEndsAt = new Date(
         Date.now() + 7 * 24 * 60 * 60 * 1000
       ).toISOString();
 
-      logger.log('Criando nova loja em Starter Trial...');
+      const planName =
+        plan === 'starter'
+          ? 'Starter'
+          : plan === 'professional'
+            ? 'Pro'
+            : 'Premium';
 
       const { data: store, error: storeError } = await supabase
         .from('stores')
@@ -110,35 +165,65 @@ export default function SetupStore() {
           owner_id: user.id,
           phone: phone.trim() || null,
           address: address.trim() || null,
-          plan: 'starter',
-          plan_name: 'Starter',
+
+          plan,
+          plan_name: planName,
+
           subscription_status: 'trial',
           trial_ends_at: trialEndsAt,
           subscription_ends_at: null,
+
           access_mode: null,
           is_blocked: false,
           cancel_at_period_end: false,
+
+          stripe_customer_id: null,
+          stripe_subscription_id: null,
         })
         .select()
         .single();
 
-      if (storeError) throw storeError;
+      if (storeError) {
+        throw storeError;
+      }
 
-      logger.log('Loja criada com Starter Trial:', store);
+      if (!store?.id) {
+        throw new Error('Loja criada sem ID válido.');
+      }
+
+      logger.log('Loja criada:', store);
       logger.log('Atualizando perfil com store_id...');
 
-      const { error: profileUpdateError } = await supabase
+      const { error: updateProfileError } = await supabase
         .from('profiles')
         .update({ store_id: store.id })
         .eq('id', user.id);
 
-      if (profileUpdateError) throw profileUpdateError;
+      if (updateProfileError) {
+        throw updateProfileError;
+      }
 
-      await refreshProfile();
+      logger.log('Perfil atualizado com store_id com sucesso.');
+
+      // Pequena pausa para evitar corrida de leitura logo após a escrita
+      await new Promise((resolve) => setTimeout(resolve, 400));
+
+      try {
+        await refreshProfile();
+      } catch (refreshError) {
+        logger.error('Falha ao atualizar perfil após criar loja:', refreshError);
+      }
+
       navigate('/app/dashboard', { replace: true });
     } catch (err) {
       logger.error('Erro ao criar loja:', err);
-      setError('Erro ao criar loja. Tente novamente.');
+
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'Erro ao criar loja. Tente novamente.';
+
+      setError(message);
       setLoading(false);
     }
   };
@@ -165,16 +250,8 @@ export default function SetupStore() {
             Configure sua Loja
           </h1>
           <p className="text-center text-gray-600 mb-8">
-            Vamos começar com as informações básicas do seu negócio.
+            Vamos começar com as informações básicas do seu negócio
           </p>
-
-          <div className="mb-6 rounded-xl border border-green-200 bg-green-50 p-4">
-            <h2 className="text-sm font-semibold text-green-800">Starter Trial automático</h2>
-            <p className="mt-1 text-sm text-green-700">
-              Sua loja será criada no plano Starter com 7 dias de teste grátis.
-              Depois, você poderá fazer upgrade dentro do app.
-            </p>
-          </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
@@ -184,7 +261,10 @@ export default function SetupStore() {
             )}
 
             <div>
-              <label htmlFor="storeName" className="block text-sm font-medium text-gray-700 mb-2">
+              <label
+                htmlFor="storeName"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
                 Nome da Loja
               </label>
               <div className="relative">
@@ -202,7 +282,10 @@ export default function SetupStore() {
             </div>
 
             <div>
-              <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-2">
+              <label
+                htmlFor="phone"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
                 Telefone
               </label>
               <div className="relative">
@@ -219,7 +302,10 @@ export default function SetupStore() {
             </div>
 
             <div>
-              <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-2">
+              <label
+                htmlFor="address"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
                 Endereço
               </label>
               <div className="relative">
@@ -233,6 +319,38 @@ export default function SetupStore() {
                   placeholder="Rua das Praias, 123"
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                Escolha seu Plano
+              </label>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {[
+                  { value: 'starter', name: 'Starter', price: 'R$ 79,90/mês' },
+                  { value: 'professional', name: 'Pro', price: 'R$ 99,90/mês' },
+                  { value: 'premium', name: 'Premium', price: 'R$ 199,90/mês' },
+                ].map((p) => (
+                  <button
+                    key={p.value}
+                    type="button"
+                    onClick={() => setPlan(p.value as StorePlan)}
+                    className={`p-4 border-2 rounded-lg text-center transition ${
+                      plan === p.value
+                        ? 'border-primary bg-green-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="font-semibold text-gray-900">{p.name}</div>
+                    <div className="text-sm text-gray-600 mt-1">{p.price}</div>
+                  </button>
+                ))}
+              </div>
+
+              <p className="mt-2 text-xs text-gray-500 text-center">
+                7 dias de teste grátis em todos os planos
+              </p>
             </div>
 
             <button

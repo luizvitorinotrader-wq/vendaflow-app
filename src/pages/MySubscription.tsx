@@ -82,7 +82,57 @@ export default function MySubscription() {
     }
   };
 
-  const getStatusTranslation = (status: string | null) => {
+  const normalizePlan = (plan: string | null | undefined): CheckoutPlan => {
+    const normalized = (plan || '').toLowerCase();
+
+    if (normalized === 'premium') return 'premium';
+    if (normalized === 'pro' || normalized === 'professional') return 'pro';
+    return 'starter';
+  };
+
+  const getPlanName = (plan: string | null) => {
+    const planNames: Record<string, string> = {
+      starter: 'Starter',
+      pro: 'Pro',
+      professional: 'Pro',
+      premium: 'Premium',
+    };
+    return planNames[plan?.toLowerCase() || ''] || plan || 'Starter';
+  };
+
+  const isBlocked = !!store?.is_blocked;
+  const isTrial =
+    !!store &&
+    !isBlocked &&
+    store.subscription_status === 'trial' &&
+    !!store.trial_ends_at;
+
+  const isPaid =
+    !!store &&
+    !isBlocked &&
+    store.subscription_status === 'active' &&
+    store.access_mode === 'paid' &&
+    !!store.subscription_ends_at;
+
+  const isManual =
+    !!store &&
+    !isBlocked &&
+    store.subscription_status === 'active' &&
+    store.access_mode === 'manual';
+
+  const isCancelled =
+    !!store &&
+    (isBlocked ||
+      store.subscription_status === 'cancelled' ||
+      store.subscription_status === 'overdue' ||
+      store.subscription_status === 'past_due');
+
+  const getStatusTranslation = () => {
+    if (!store) return '-';
+    if (isBlocked) return 'Bloqueada';
+    if (isTrial) return 'Teste Grátis';
+    if (isPaid || isManual) return 'Ativa';
+
     const translations: Record<string, string> = {
       trial: 'Teste Grátis',
       active: 'Ativa',
@@ -90,21 +140,16 @@ export default function MySubscription() {
       overdue: 'Vencida',
       cancelled: 'Cancelada',
     };
-    return translations[status || ''] || status || '-';
+
+    return translations[store.subscription_status || ''] || store.subscription_status || '-';
   };
 
-  const getStatusColor = (status: string | null, isBlocked: boolean) => {
-    if (isBlocked) return 'bg-red-100 text-red-800';
-
-    const colors: Record<string, string> = {
-      trial: 'bg-yellow-100 text-yellow-800',
-      active: 'bg-green-100 text-green-800',
-      past_due: 'bg-orange-100 text-orange-800',
-      overdue: 'bg-orange-100 text-orange-800',
-      cancelled: 'bg-red-100 text-red-800',
-    };
-
-    return colors[status || ''] || 'bg-gray-100 text-gray-800';
+  const getStatusColor = () => {
+    if (!store) return 'bg-gray-100 text-gray-800';
+    if (isBlocked || isCancelled) return 'bg-red-100 text-red-800';
+    if (isTrial) return 'bg-yellow-100 text-yellow-800';
+    if (isPaid || isManual) return 'bg-green-100 text-green-800';
+    return 'bg-gray-100 text-gray-800';
   };
 
   const getDaysRemaining = () => {
@@ -113,9 +158,9 @@ export default function MySubscription() {
     const now = new Date();
     let endDate: Date | null = null;
 
-    if (store.subscription_status === 'trial' && store.trial_ends_at) {
+    if (isTrial && store.trial_ends_at) {
       endDate = new Date(store.trial_ends_at);
-    } else if (store.subscription_status === 'active' && store.subscription_ends_at) {
+    } else if (isPaid && store.subscription_ends_at) {
       endDate = new Date(store.subscription_ends_at);
     }
 
@@ -129,64 +174,27 @@ export default function MySubscription() {
   const getStatusMessage = () => {
     if (!store) return '';
 
-    if (store.is_blocked) {
-      return 'Sua loja está bloqueada';
-    }
+    if (isBlocked) return 'Sua loja está bloqueada';
+    if (isTrial) return 'Seu teste grátis está ativo';
+    if (isPaid || isManual) return 'Sua assinatura está ativa';
+    if (store.subscription_status === 'past_due') return 'Sua assinatura está com pagamento pendente';
+    if (store.subscription_status === 'overdue') return 'Sua assinatura venceu';
+    if (store.subscription_status === 'cancelled') return 'Sua assinatura foi cancelada';
 
-    switch (store.subscription_status) {
-      case 'trial':
-        return 'Seu teste grátis está ativo';
-      case 'active':
-        return 'Sua assinatura está ativa';
-      case 'overdue':
-        return 'Sua assinatura venceu';
-      case 'cancelled':
-        return 'Sua loja está bloqueada';
-      default:
-        return '';
-    }
+    return '';
   };
 
   const getStatusMessageColor = () => {
     if (!store) return 'bg-gray-100 text-gray-800 border-gray-300';
-
-    if (store.is_blocked || store.subscription_status === 'cancelled') {
-      return 'bg-red-100 border-red-300 text-red-700';
-    }
-
-    switch (store.subscription_status) {
-      case 'trial':
-        return 'bg-yellow-100 border-yellow-300 text-yellow-700';
-      case 'active':
-        return 'bg-green-100 border-green-300 text-green-700';
-      case 'overdue':
-        return 'bg-orange-100 border-orange-300 text-orange-700';
-      default:
-        return 'bg-gray-100 border-gray-300 text-gray-700';
-    }
+    if (isBlocked || isCancelled) return 'bg-red-100 border-red-300 text-red-700';
+    if (isTrial) return 'bg-yellow-100 border-yellow-300 text-yellow-700';
+    if (isPaid || isManual) return 'bg-green-100 border-green-300 text-green-700';
+    return 'bg-gray-100 border-gray-300 text-gray-700';
   };
 
   const formatDate = (date: string | null) => {
     if (!date) return '-';
     return new Date(date).toLocaleDateString('pt-BR');
-  };
-
-  const getPlanName = (plan: string | null) => {
-    const planNames: Record<string, string> = {
-      starter: 'Starter',
-      pro: 'Pro',
-      professional: 'Pro',
-      premium: 'Premium',
-    };
-    return planNames[plan?.toLowerCase() || ''] || plan || 'Starter';
-  };
-
-  const normalizePlan = (plan: string | null | undefined): CheckoutPlan => {
-    const normalized = (plan || '').toLowerCase();
-
-    if (normalized === 'premium') return 'premium';
-    if (normalized === 'pro' || normalized === 'professional') return 'pro';
-    return 'starter';
   };
 
   const getNextPlan = (plan: string | null | undefined): CheckoutPlan | null => {
@@ -342,6 +350,8 @@ export default function MySubscription() {
   const limits = getPlanLimits(store.plan || 'starter');
   const upgradeLabel = getUpgradeLabel(store.plan || store.plan_name);
   const hasUpgrade = !!getNextPlan(store.plan || store.plan_name);
+  const canRenew = isPaid || isManual;
+  const showAccessModeBadge = isPaid || isManual;
   const isAnyProcessing = processingAction !== null;
 
   return (
@@ -382,8 +392,7 @@ export default function MySubscription() {
 
       <div className={`rounded-2xl border px-6 py-4 shadow-sm ${getStatusMessageColor()}`}>
         <div className="flex items-center gap-3">
-          {(store.subscription_status === 'active' || store.subscription_status === 'trial') &&
-          !store.is_blocked ? (
+          {(isPaid || isManual || isTrial) && !store.is_blocked ? (
             <CheckCircle className="h-6 w-6" />
           ) : (
             <AlertTriangle className="h-6 w-6" />
@@ -408,7 +417,7 @@ export default function MySubscription() {
             </div>
           </div>
 
-          {store.access_mode && (
+          {showAccessModeBadge && store.access_mode && (
             <div className="mt-4">
               <span
                 className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${getAccessModeBadge(
@@ -431,12 +440,9 @@ export default function MySubscription() {
               </div>
               <div className="mt-3">
                 <span
-                  className={`inline-flex rounded-full px-3 py-1 text-sm font-semibold ${getStatusColor(
-                    store.subscription_status,
-                    store.is_blocked
-                  )}`}
+                  className={`inline-flex rounded-full px-3 py-1 text-sm font-semibold ${getStatusColor()}`}
                 >
-                  {getStatusTranslation(store.subscription_status)}
+                  {getStatusTranslation()}
                 </span>
               </div>
             </div>
@@ -474,7 +480,7 @@ export default function MySubscription() {
                 Teste grátis até
               </div>
               <div className="mt-1 text-xl font-bold text-gray-900">
-                {formatDate(store.trial_ends_at)}
+                {isTrial ? formatDate(store.trial_ends_at) : '-'}
               </div>
             </div>
           </div>
@@ -490,7 +496,7 @@ export default function MySubscription() {
                 Assinatura válida até
               </div>
               <div className="mt-1 text-xl font-bold text-gray-900">
-                {formatDate(store.subscription_ends_at)}
+                {(isPaid || isManual) ? formatDate(store.subscription_ends_at) : '-'}
               </div>
             </div>
           </div>
@@ -591,38 +597,40 @@ export default function MySubscription() {
           </button>
         )}
 
-        <button
-          onClick={handleRenewSubscription}
-          disabled={isAnyProcessing}
-          className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {processingAction === 'renew' ? (
-            <>
-              <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24">
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                  fill="none"
-                />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                />
-              </svg>
-              Processando...
-            </>
-          ) : (
-            <>
-              <CreditCard className="h-5 w-5" />
-              Renovar Assinatura
-            </>
-          )}
-        </button>
+        {canRenew && (
+          <button
+            onClick={handleRenewSubscription}
+            disabled={isAnyProcessing}
+            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {processingAction === 'renew' ? (
+              <>
+                <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24">
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                    fill="none"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
+                </svg>
+                Processando...
+              </>
+            ) : (
+              <>
+                <CreditCard className="h-5 w-5" />
+                Renovar Assinatura
+              </>
+            )}
+          </button>
+        )}
       </div>
     </div>
   );

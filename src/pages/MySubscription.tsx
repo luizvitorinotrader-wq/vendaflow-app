@@ -350,7 +350,9 @@ export default function MySubscription() {
   const limits = getPlanLimits(store.plan || 'starter');
   const upgradeLabel = getUpgradeLabel(store.plan || store.plan_name);
   const hasUpgrade = !!getNextPlan(store.plan || store.plan_name);
-  const canRenew = isPaid || isManual;
+  const canRenew =
+  store.subscription_status === 'active' &&
+  store.access_mode === 'paid';
   const showAccessModeBadge = isPaid || isManual;
   const isAnyProcessing = processingAction !== null;
 
@@ -597,7 +599,7 @@ export default function MySubscription() {
           </button>
         )}
 
-        {canRenew && (
+        {!isTrial && canRenew && (
           <button
             onClick={handleRenewSubscription}
             disabled={isAnyProcessing}
